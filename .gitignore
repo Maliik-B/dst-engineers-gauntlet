@@ -1,0 +1,11 @@
+# Local-only AI workflow context — never commit (public portfolio repo)
+CLAUDE.md
+.claude/
+
+# Extracted DST reference scripts (Klei's code — never commit)
+.reference/
+
+# Archives / OS noise
+*.zip
+Thumbs.db
+desktop.ini
