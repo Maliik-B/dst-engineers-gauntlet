@@ -32,9 +32,15 @@ after a world reload:
 mklink /J "C:\Program Files (x86)\Steam\steamapps\common\Don't Starve Together\mods\engineers-gauntlet" "D:\Applications\dst-engineers-gauntlet\mod"
 ```
 
-Run the local offline dev server (single shard) with `tools\run-server.bat`, then join from the DST
-client via **Browse Games → LAN**. Console: `~` opens it; `Ctrl` toggles **remote** (server-side)
-execution — requires your KU id in the cluster's `adminlist.txt`.
+Run the local offline dev server (single shard) with `tools\run-server.bat`, then connect from the
+DST client's main-menu console: `c_connect("127.0.0.1", 10999)`. (Same-host LAN-tab discovery is
+unreliable even with a firewall rule — direct connect always works. A headless dedicated server
+never triggers Windows' allow-access prompt, so LAN visibility needs `tools\allow-firewall.ps1`
+run elevated.)
+
+Console: `~` opens it; `Ctrl` toggles **remote** (server-side) execution — requires your id in the
+cluster's `adminlist.txt`. Note: offline servers authenticate clients with offline ids
+(`OU_<steamid64>`), not Klei `KU_` ids — use the `OU_` id shown in the server log on connect.
 
 Dev loop: edit Lua → `c_reset()` in the console (reloads world + mod code) → test. `c_gauntlet()`
 prints mod liveness and which sim you're on.
