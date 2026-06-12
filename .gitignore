@@ -1,0 +1,7 @@
+# Extracted DST reference scripts (Klei's code — never commit)
+.reference/
+
+# Archives / OS noise
+*.zip
+Thumbs.db
+desktop.ini
