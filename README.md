@@ -9,14 +9,15 @@ This is a netcode portfolio piece: the centerpiece is a measured naive-vs-optimi
 (`c_naive` toggle, `c_stress(n)`, on-screen server MSPT / updating-entity / netvar-diff readout),
 with a companion document explaining the three core network decisions with `file:line` evidence.
 
-**Status: M0 — dev environment + mod skeleton.** Not yet playable.
+**Status: M0 complete — dev environment verified end to end. M1 (core wave loop) next.** Not yet
+playable.
 
 ## Milestones
 
 | # | Milestone | Status |
 |---|---|---|
-| M0 | Dev env: local dedicated server, console access, mod skeleton | 🔨 in progress |
-| M1 | Core wave loop: siege manager, timed waves, objective HP, win/lose | — |
+| M0 | Dev env: local dedicated server, console access, mod skeleton | ✅ done |
+| M1 | Core wave loop: siege manager, timed waves, objective HP, win/lose, player-centric test harness | — |
 | M2 | Load dial + deliberately-naive baseline, first measurements | — |
 | M3 | Optimization pass: sleep/wake, quantized netvars, batched RPCs | — |
 | M4 | Defense layer: buildable auto-turret + commandable minion (command RPC) | — |
