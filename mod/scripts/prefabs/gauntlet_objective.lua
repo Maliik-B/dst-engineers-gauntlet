@@ -13,6 +13,11 @@ local assets =
     Asset("ANIM", "anim/moonbase.zip"),
 }
 
+local prefabs =
+{
+    "collapse_small",
+}
+
 -- Damage-tier anims shipped in the moonbase bank: full / med / medlow / low.
 local function GetDamageState(inst)
     local pct = inst.components.health:GetPercent()
@@ -38,6 +43,19 @@ local function OnDeath(inst)
     -- The broken engine stays standing (health.nofadeout); the siegemanager
     -- listens for this same "death" event to call the loss.
     inst.SoundEmitter:PlaySound("dontstarve/wilson/rock_break")
+end
+
+-- Hammer-to-dismantle: the deliberate player removal path (the wall idiom),
+-- a separate channel from the combat/health lose bar. Removing the engine
+-- fires "onremove", which the siegemanager reads as a voluntary stand-down
+-- (NOT a defeat) — the moonbase precedent of interrupting the event by
+-- acting on its trigger object. Ungated on purpose: you can dismantle
+-- mid-run to call it off.
+local function OnHammered(inst)
+    local fx = SpawnPrefab("collapse_small")
+    fx.Transform:SetPosition(inst.Transform:GetWorldPosition())
+    fx:SetMaterial("rock")
+    inst:Remove()
 end
 
 -- The objective is targetable but never retaliates.
@@ -123,11 +141,24 @@ local function fn()
     inst.components.health:SetMaxHealth(TUNING.GAUNTLET_OBJECTIVE_HEALTH)
     inst.components.health.nofadeout = true -- "death" leaves the broken engine, no erode
     inst.components.health.canheal = false
+    -- Halve player weapon damage: the engine stays destroyable by hand like
+    -- any DST structure (a hammer-less player can tear it down to end a siege),
+    -- just at roughly attacker-tier DPS. The hammer channel below is the clean
+    -- *neutral* dismantle; weapon-to-death trips the normal lose condition.
+    -- (DoDelta only applies this when the afflicter has the "player" tag, so
+    -- mob damage — the lose bar — is untouched.)
+    inst.components.health:SetAbsorptionAmountFromPlayer(TUNING.GAUNTLET_OBJECTIVE_PLAYER_ABSORB)
 
     -- Combat exists purely so attackers can target it; KeepTargetFn = false
     -- means it never holds a target of its own.
     inst:AddComponent("combat")
     inst.components.combat:SetKeepTargetFunction(KeepTargetFn)
+
+    -- Deconstruct channel, separate from the lose bar (the wall pattern).
+    inst:AddComponent("workable")
+    inst.components.workable:SetWorkAction(ACTIONS.HAMMER)
+    inst.components.workable:SetWorkLeft(TUNING.GAUNTLET_OBJECTIVE_WORK)
+    inst.components.workable:SetOnFinishCallback(OnHammered)
 
     inst:ListenForEvent("healthdelta", OnHealthDelta)
     inst:ListenForEvent("death", OnDeath)
@@ -143,4 +174,4 @@ local function fn()
     return inst
 end
 
-return Prefab("gauntlet_objective", fn, assets)
+return Prefab("gauntlet_objective", fn, assets, prefabs)

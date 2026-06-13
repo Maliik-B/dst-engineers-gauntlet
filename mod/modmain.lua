@@ -33,6 +33,14 @@ TUNING.GAUNTLET_SPAWN_INTERVAL_BASE = 1     -- drip-release: one spawn per inter
 TUNING.GAUNTLET_SPAWN_INTERVAL_VAR = 1      -- ...plus up to this much jitter
 
 TUNING.GAUNTLET_OBJECTIVE_HEALTH = 1000
+TUNING.GAUNTLET_OBJECTIVE_WORK = 4          -- hammer hits to dismantle the engine (stand-down)
+-- Fraction of player weapon damage ABSORBED by the engine (player deals the
+-- rest). 0.5 = halve it: the engine stays destroyable by hand like any DST
+-- structure (a hammer-less player can end a siege by tearing it down), but at
+-- roughly attacker-tier DPS rather than instantly. Weapon-to-death trips the
+-- normal lose condition; the hammer (workable) is the clean *neutral*
+-- dismantle. Mob damage is untouched (DoDelta only absorbs player afflicters).
+TUNING.GAUNTLET_OBJECTIVE_PLAYER_ABSORB = 0.5
 
 -- Attacker: a retuned hound (baselines: TUNING.HOUND_* / MOONHOUND_*).
 TUNING.GAUNTLET_ATTACKER_HEALTH = 150
