@@ -5,6 +5,9 @@ CLAUDE.md
 # Extracted DST reference scripts (Klei's code — never commit)
 .reference/
 
+# Dev server logs (transient, written by the local dedicated server)
+tools/*.log
+
 # Archives / OS noise
 *.zip
 Thumbs.db
