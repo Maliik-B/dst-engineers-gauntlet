@@ -112,11 +112,15 @@ local function fn()
 
     inst:AddComponent("spawnfader")
 
-    -- Naive-path replication strawman (M2): a per-attacker net_float the naive
-    -- load component re-set()s every tick. Declared on both sides before
-    -- SetPristine (netvar hard rule); it carries no dirty event because no
-    -- client reaction is needed -- the cost on display is the raw replication
-    -- churn, which happens whether or not a listener is registered.
+    -- Per-attacker replication strawman: a net_float the load component
+    -- re-set()s every tick in NAIVE mode only. Declared on both sides before
+    -- SetPristine (netvar hard rule) regardless of the live flag -- a netvar
+    -- can't be conditionally declared without breaking deserialization. The
+    -- optimized path recognizes it as redundant (the engine already replicates
+    -- transforms) and simply never set()s it, so it costs zero replication;
+    -- "dropping" it operationally means never writing it. It carries no dirty
+    -- event because the cost on display is the raw replication churn, which
+    -- happens whether or not a listener is registered.
     inst._naivesync = net_float(inst.GUID, "gauntlet._naivesync")
 
     inst.entity:SetPristine()
@@ -169,15 +173,15 @@ local function fn()
 
     inst:ListenForEvent("attacked", OnAttacked)
 
-    -- M2 naive-path load. Added always (master-only), but idle unless the naive
-    -- flag is on. A freshly spawned attacker inherits the current flag, and a
-    -- live c_naive() flip reaches every attacker already in the field through
-    -- this TheWorld event.
-    inst:AddComponent("gauntletnaiveload")
+    -- Per-attacker load path. Added always (master-only); it runs in the
+    -- naive or the optimized mode per the global flag. A freshly spawned
+    -- attacker inherits the current flag, and a live c_naive() flip reaches
+    -- every attacker already in the field through this TheWorld event.
+    inst:AddComponent("gauntletload")
     local siegemanager = TheWorld.components.siegemanager
-    inst.components.gauntletnaiveload:SetNaive(siegemanager ~= nil and siegemanager:IsNaive())
+    inst.components.gauntletload:SetNaive(siegemanager ~= nil and siegemanager:IsNaive())
     inst:ListenForEvent("gauntlet_naivechanged", function(world, data)
-        inst.components.gauntletnaiveload:SetNaive(data ~= nil and data.naive)
+        inst.components.gauntletload:SetNaive(data ~= nil and data.naive)
     end, TheWorld)
 
     return inst
