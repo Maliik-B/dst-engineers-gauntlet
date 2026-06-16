@@ -100,12 +100,22 @@ _G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_ATTACKER = "It only has eyes for
 --     drives the M5 wave-incoming banner/FX from a single atomic event.
 --------------------------------------------------------------------------
 
+-- Pre-declare the client-side RPC tallies HERE, at modmain's main chunk. DST
+-- runs a strict-global guard (strict.lua:21-24): reading an undeclared global
+-- from inside a function — which is exactly what these client RPC handlers do —
+-- raises "variable '...' is not declared" and crashes the client the moment the
+-- first RPC arrives. Main-chunk assignment is allowed (same as the c_ console
+-- globals below), so initializing them here declares them; the handlers then
+-- only read/increment already-declared names.
+_G.GAUNTLET_CLIENT_SPAWN_RPCS = 0
+_G.GAUNTLET_CLIENT_WAVE_RPCS = 0
+
 AddClientModRPCHandler("EngineersGauntlet", "GauntletAttackerSpawned", function(x, z)
-    _G.GAUNTLET_CLIENT_SPAWN_RPCS = (_G.GAUNTLET_CLIENT_SPAWN_RPCS or 0) + 1
+    _G.GAUNTLET_CLIENT_SPAWN_RPCS = _G.GAUNTLET_CLIENT_SPAWN_RPCS + 1
 end)
 
 AddClientModRPCHandler("EngineersGauntlet", "GauntletWaveIncoming", function(wave, count, tier)
-    _G.GAUNTLET_CLIENT_WAVE_RPCS = (_G.GAUNTLET_CLIENT_WAVE_RPCS or 0) + 1
+    _G.GAUNTLET_CLIENT_WAVE_RPCS = _G.GAUNTLET_CLIENT_WAVE_RPCS + 1
 end)
 
 --------------------------------------------------------------------------
@@ -127,7 +137,7 @@ end)
 --   c_gauntlet_place/start/stop — objective + wave control (M1)
 --   c_stress(n)          — slam n attackers on the objective now (M2 load dial)
 --   c_naive(true/false)  — flip the naive-vs-optimized code path live (M2)
---   c_metrics()          — print the perf readout; c_metrics_reset() zeroes it
+--   c_metrics()          — announce the perf readout to chat; c_metrics_reset() zeroes it
 --------------------------------------------------------------------------
 
 local function GetSiegeManager()
@@ -138,17 +148,31 @@ local function GetSiegeManager()
     return _G.TheWorld.components.siegemanager
 end
 
+-- Surface a line BOTH to the server log (print) and into in-game chat
+-- (TheNet:Announce). A command typed in the remote console runs on the server,
+-- so its print() lands only in the server log — invisible to the player driving
+-- it. Announcing mirrors it into chat so the readout is actually readable
+-- client-side during a live A/B. Announce is master-sim authoritative (guarded);
+-- on a client this just prints locally. The on-screen metrics HUD is M5 — this
+-- is the dev-harness stopgap.
+local function GauntletReport(msg)
+    print(msg)
+    if _G.TheWorld ~= nil and _G.TheWorld.ismastersim and _G.TheNet ~= nil then
+        _G.TheNet:Announce(msg)
+    end
+end
+
 -- Liveness + siege state probe.
 _G.c_gauntlet = function()
-    print(string.format("[Gauntlet] alive | mastersim=%s wave_size=%d",
+    GauntletReport(string.format("[Gauntlet] alive | mastersim=%s wave_size=%d",
         tostring(_G.TheNet:GetIsMasterSimulation()), TUNING.GAUNTLET_WAVE_SIZE))
     local siegemanager = _G.TheWorld ~= nil and _G.TheWorld.components.siegemanager or nil
     if siegemanager ~= nil then
-        print("[Gauntlet] " .. siegemanager:GetDebugString())
+        GauntletReport("[Gauntlet] " .. siegemanager:GetDebugString())
     end
     local metrics = _G.TheWorld ~= nil and _G.TheWorld.components.gauntletmetrics or nil
     if metrics ~= nil then
-        print("[Gauntlet] " .. metrics:GetReadout())
+        GauntletReport("[Gauntlet] " .. metrics:GetReadout())
     end
 end
 
@@ -205,7 +229,7 @@ _G.c_naive = function(enable)
         enable = true
     end
     siegemanager:SetNaive(enable)
-    print(string.format("[Gauntlet] naive path %s", siegemanager:IsNaive()
+    GauntletReport(string.format("[Gauntlet] naive path %s", siegemanager:IsNaive()
         and "ON — strawman (per-spawn RPC, per-tick non-sleeping update, net_float churn)"
         or "off — optimized (batched per-wave RPC, sleep-stop + throttled scan, no churn)"))
 end
@@ -217,7 +241,7 @@ _G.c_metrics = function()
     end
     local metrics = _G.TheWorld.components.gauntletmetrics
     if metrics ~= nil then
-        print("[Gauntlet] " .. metrics:GetReadout())
+        GauntletReport("[Gauntlet] " .. metrics:GetReadout())
     end
 end
 
@@ -229,7 +253,7 @@ _G.c_metrics_reset = function()
     local metrics = _G.TheWorld.components.gauntletmetrics
     if metrics ~= nil then
         metrics:ResetCounters()
-        print("[Gauntlet] metrics counters reset")
+        GauntletReport("[Gauntlet] metrics counters reset")
     end
 end
 
