@@ -57,6 +57,9 @@ TUNING.GAUNTLET_ATTACKER_MAX_CHASE = 10     -- short chase: kiting can't pull th
 TUNING.GAUNTLET_ATTACKER_LOST_DIST = 60     -- strays this far from the objective self-despawn...
 TUNING.GAUNTLET_ATTACKER_LOST_TIME = 5      -- ...after this many seconds
 
+-- M2 naive path (the deliberately-unoptimized strawman, toggled by c_naive).
+TUNING.GAUNTLET_NAIVE_SCAN_RADIUS = 20      -- per-tick neighbour-scan radius (the O(N*k) cost)
+
 --------------------------------------------------------------------------
 -- Strings
 --------------------------------------------------------------------------
@@ -67,13 +70,31 @@ _G.STRINGS.NAMES.GAUNTLET_ATTACKER = "Besieger"
 _G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_ATTACKER = "It only has eyes for the Engine."
 
 --------------------------------------------------------------------------
--- World component. Master-sim only (mirrors how forest.lua attaches its
--- spawners); the component itself also asserts ismastersim on construction.
+-- Mod RPC handlers. Registered unconditionally on every process (server,
+-- clients, both shard processes later) in a fixed order — registration order
+-- assigns the network ids, so the tables must line up everywhere.
+--
+-- GauntletAttackerSpawned is the M2 naive strawman: the server fires ONE per
+-- attacker spawn (server->client, trusted/unrated). M3 replaces it with a
+-- single batched per-wave RPC. The handler body is intentionally trivial — the
+-- cost on display is the per-spawn send volume, not the work here (a naive
+-- client might ping/FX each spawn at (x, z)); it just tallies arrivals so the
+-- flood is observable client-side via GAUNTLET_CLIENT_SPAWN_RPCS.
+--------------------------------------------------------------------------
+
+AddClientModRPCHandler("EngineersGauntlet", "GauntletAttackerSpawned", function(x, z)
+    _G.GAUNTLET_CLIENT_SPAWN_RPCS = (_G.GAUNTLET_CLIENT_SPAWN_RPCS or 0) + 1
+end)
+
+--------------------------------------------------------------------------
+-- World components. Master-sim only (mirrors how forest.lua attaches its
+-- spawners); each component also asserts ismastersim on construction.
 --------------------------------------------------------------------------
 
 AddPrefabPostInit("world", function(inst)
     if inst.ismastersim then
         inst:AddComponent("siegemanager")
+        inst:AddComponent("gauntletmetrics")
     end
 end)
 
@@ -81,6 +102,10 @@ end)
 -- Player-centric console harness (runs server-side via the remote console).
 -- Observation/balancing rides the built-ins — c_godmode, c_freecrafting,
 -- c_speedmult, c_spawn — those are not rebuilt here.
+--   c_gauntlet_place/start/stop — objective + wave control (M1)
+--   c_stress(n)          — slam n attackers on the objective now (M2 load dial)
+--   c_naive(true/false)  — flip the naive-vs-optimized code path live (M2)
+--   c_metrics()          — print the perf readout; c_metrics_reset() zeroes it
 --------------------------------------------------------------------------
 
 local function GetSiegeManager()
@@ -98,6 +123,10 @@ _G.c_gauntlet = function()
     local siegemanager = _G.TheWorld ~= nil and _G.TheWorld.components.siegemanager or nil
     if siegemanager ~= nil then
         print("[Gauntlet] " .. siegemanager:GetDebugString())
+    end
+    local metrics = _G.TheWorld ~= nil and _G.TheWorld.components.gauntletmetrics or nil
+    if metrics ~= nil then
+        print("[Gauntlet] " .. metrics:GetReadout())
     end
 end
 
@@ -130,6 +159,55 @@ _G.c_gauntlet_stop = function()
     local siegemanager = GetSiegeManager()
     if siegemanager ~= nil then
         siegemanager:StopSiege()
+    end
+end
+
+--------------------------------------------------------------------------
+-- Load harness (M2). c_stress slams attackers on instantly; c_naive flips the
+-- deliberately-naive path for the whole arena; c_metrics prints the readout.
+--------------------------------------------------------------------------
+
+_G.c_stress = function(n)
+    local siegemanager = GetSiegeManager()
+    if siegemanager ~= nil then
+        return siegemanager:Stress(n or 10)
+    end
+end
+
+_G.c_naive = function(enable)
+    local siegemanager = GetSiegeManager()
+    if siegemanager == nil then
+        return
+    end
+    if enable == nil then
+        enable = true
+    end
+    siegemanager:SetNaive(enable)
+    print(string.format("[Gauntlet] naive path %s", siegemanager:IsNaive()
+        and "ON — strawman (per-spawn RPC, per-tick non-sleeping update, net_float churn)"
+        or "off — optimized baseline"))
+end
+
+_G.c_metrics = function()
+    if _G.TheWorld == nil or not _G.TheWorld.ismastersim then
+        print("[Gauntlet] metrics are master-sim only — use the remote console")
+        return
+    end
+    local metrics = _G.TheWorld.components.gauntletmetrics
+    if metrics ~= nil then
+        print("[Gauntlet] " .. metrics:GetReadout())
+    end
+end
+
+_G.c_metrics_reset = function()
+    if _G.TheWorld == nil or not _G.TheWorld.ismastersim then
+        print("[Gauntlet] metrics are master-sim only — use the remote console")
+        return
+    end
+    local metrics = _G.TheWorld.components.gauntletmetrics
+    if metrics ~= nil then
+        metrics:ResetCounters()
+        print("[Gauntlet] metrics counters reset")
     end
 end
 

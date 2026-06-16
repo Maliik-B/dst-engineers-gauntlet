@@ -5,9 +5,9 @@
 name = "Engineer's Gauntlet"
 description = [[Co-op wave defense. Escalating sieges path to a defended objective — hold the line with buildable auto-turrets and a commandable minion. Any character can defend.
 
-v0.2 — core wave loop (objective, waves, win/lose).]]
+v0.3 — load dial + naive baseline (c_stress, c_naive, on-server perf metrics).]]
 author = "Maliik Bryan"
-version = "0.2.0"
+version = "0.3.0"
 
 api_version = 10
 

@@ -38,6 +38,7 @@ local _numactive = 0
 local _warning = false
 local _timetonextwarnsound = 0
 local _updating = false
+local _naive = false -- M2 load dial: deliberately-naive code path (c_naive)
 
 --------------------------------------------------------------------------
 --[[ Private: state plumbing ]]
@@ -140,16 +141,9 @@ local function GetSpawnPoint(pt)
     return offset ~= nil and pt + offset or nil
 end
 
-local function SpawnAttacker()
-    if _objective == nil or not _objective:IsValid() then
-        return false
-    end
-    local objectivepos = _objective:GetPosition()
-    local pt = GetSpawnPoint(objectivepos)
-    if pt == nil then
-        return false
-    end
-
+-- Spawn one attacker at pt, hand off the objective, track it, and (naive only)
+-- fire the per-spawn RPC tax. Callers guarantee _objective is valid.
+local function SpawnOneAt(pt)
     local attacker = SpawnPrefab("gauntlet_attacker")
     -- Objective handoff: stamped per-spawn so the brain's leash/siege nodes
     -- and the anti-kiting gates all read the same tracked entity.
@@ -159,9 +153,33 @@ local function SpawnAttacker()
     else
         attacker.Transform:SetPosition(pt:Get())
     end
-    attacker:FacePoint(objectivepos)
+    attacker:FacePoint(_objective:GetPosition())
     attacker.components.spawnfader:FadeIn()
     TrackAttacker(attacker)
+
+    if _naive then
+        -- Naive tax: ONE server->client RPC per spawn (M3 batches this into one
+        -- per-wave RPC). Server->client is trusted/unrated, so the whole burst
+        -- goes out -- that's the bandwidth strawman. GetClientModRPC/Send are
+        -- file-scope globals, callable straight from a component.
+        SendModRPCToClient(GetClientModRPC("EngineersGauntlet", "GauntletAttackerSpawned"), nil, pt.x, pt.z)
+        local metrics = TheWorld.components.gauntletmetrics
+        if metrics ~= nil then
+            metrics:CountSpawnRPC()
+        end
+    end
+    return attacker
+end
+
+local function SpawnAttacker()
+    if _objective == nil or not _objective:IsValid() then
+        return false
+    end
+    local pt = GetSpawnPoint(_objective:GetPosition())
+    if pt == nil then
+        return false
+    end
+    SpawnOneAt(pt)
     return true
 end
 
@@ -321,6 +339,48 @@ function self:StartSiege()
         TUNING.GAUNTLET_FIRST_WAVE_DELAY))
 end
 
+-- c_stress(n): slam n attackers onto the objective immediately (no drip), for
+-- load measurement. Tracked like wave attackers, so c_gauntlet_stop() clears
+-- them; intended for raw-load tests in IDLE, but valid in any non-terminal
+-- phase (during a wave it simply adds to the live count).
+function self:Stress(n)
+    if _objective == nil or not _objective:IsValid() then
+        print("[Gauntlet] no objective placed — run c_gauntlet_place() first")
+        return 0
+    elseif _objective.components.health:IsDead() then
+        print("[Gauntlet] the Engine is destroyed — place a fresh one first")
+        return 0
+    end
+    n = math.max(0, math.floor(tonumber(n) or 0))
+    local objectivepos = _objective:GetPosition()
+    local spawned = 0
+    for _ = 1, n do
+        local pt = GetSpawnPoint(objectivepos)
+        if pt ~= nil then
+            SpawnOneAt(pt)
+            spawned = spawned + 1
+        end
+    end
+    print(string.format("[Gauntlet] c_stress: +%d/%d besiegers (active=%d, naive=%s)",
+        spawned, n, _numactive, tostring(_naive)))
+    return spawned
+end
+
+function self:IsNaive()
+    return _naive
+end
+
+-- c_naive(bool): flip the deliberately-naive code path for the whole arena.
+-- Live -- pushes to every attacker already in the field via TheWorld, and new
+-- spawns inherit the flag.
+function self:SetNaive(enable)
+    enable = enable and true or false
+    if enable ~= _naive then
+        _naive = enable
+        TheWorld:PushEvent("gauntlet_naivechanged", { naive = _naive })
+    end
+end
+
 function self:StopSiege(silent)
     if _worldsettingstimer:ActiveTimerExists(WAVE_TIMER) then
         _worldsettingstimer:StopTimer(WAVE_TIMER)
@@ -470,13 +530,14 @@ function self:GetDebugString()
         objectivestr = string.format("%d/%d hp",
             math.floor(health.currenthealth + .5), math.floor(health.maxhealth + .5))
     end
-    return string.format("phase=%s wave=%d/%d nextwave=%s warning=%s spawnsleft=%d active=%d objective=%s",
+    return string.format("phase=%s wave=%d/%d nextwave=%s warning=%s spawnsleft=%d active=%d naive=%s objective=%s",
         PHASE_NAMES[_phase] or tostring(_phase),
         _wavenum, TUNING.GAUNTLET_NUM_WAVES,
         timeleft ~= nil and string.format("%.1fs", timeleft) or "-",
         tostring(_warning),
         _spawnsleft,
         _numactive,
+        tostring(_naive),
         objectivestr)
 end
 

@@ -112,6 +112,13 @@ local function fn()
 
     inst:AddComponent("spawnfader")
 
+    -- Naive-path replication strawman (M2): a per-attacker net_float the naive
+    -- load component re-set()s every tick. Declared on both sides before
+    -- SetPristine (netvar hard rule); it carries no dirty event because no
+    -- client reaction is needed -- the cost on display is the raw replication
+    -- churn, which happens whether or not a listener is registered.
+    inst._naivesync = net_float(inst.GUID, "gauntlet._naivesync")
+
     inst.entity:SetPristine()
 
     if not TheWorld.ismastersim then
@@ -161,6 +168,17 @@ local function fn()
     MakeHauntablePanic(inst)
 
     inst:ListenForEvent("attacked", OnAttacked)
+
+    -- M2 naive-path load. Added always (master-only), but idle unless the naive
+    -- flag is on. A freshly spawned attacker inherits the current flag, and a
+    -- live c_naive() flip reaches every attacker already in the field through
+    -- this TheWorld event.
+    inst:AddComponent("gauntletnaiveload")
+    local siegemanager = TheWorld.components.siegemanager
+    inst.components.gauntletnaiveload:SetNaive(siegemanager ~= nil and siegemanager:IsNaive())
+    inst:ListenForEvent("gauntlet_naivechanged", function(world, data)
+        inst.components.gauntletnaiveload:SetNaive(data ~= nil and data.naive)
+    end, TheWorld)
 
     return inst
 end
