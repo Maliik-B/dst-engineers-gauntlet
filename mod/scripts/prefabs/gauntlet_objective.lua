@@ -27,7 +27,29 @@ local function GetDamageState(inst)
         or "low"
 end
 
+-- Objective HP -> quantized net_byte bucket, the textbook continuous-value
+-- replication: encode the 0..1 fraction as floor(frac*200+.5) (0.5% steps, the
+-- health-penalty quantization, health_replica.lua:63-68) and set() only when
+-- the bucket actually changes. set() dirties on real change only, so chipping
+-- the engine to death produces at most ~200 replication events over its whole
+-- life -- not one per damage tick. Contrast the dropped per-attacker net_float
+-- (churned every tick); this is the value clients genuinely need (the HP bar),
+-- replicated the cheap, correct way.
+local HP_QUANTUM = 200
+
+local function PublishObjectiveHP(inst)
+    local bucket = math.floor(inst.components.health:GetPercent() * HP_QUANTUM + .5)
+    if inst._objhp:value() ~= bucket then
+        inst._objhp:set(bucket)
+        local metrics = TheWorld.components.gauntletmetrics
+        if metrics ~= nil then
+            metrics:CountNetvarDirty()
+        end
+    end
+end
+
 local function OnHealthDelta(inst, data)
+    PublishObjectiveHP(inst)
     local state = GetDamageState(inst)
     if state == "low" then
         inst.AnimState:PlayAnimation("low")
@@ -95,6 +117,12 @@ local function OnPhaseDirty(inst)
         GAUNTLET.PHASE_NAMES[inst._phase:value()] or tostring(inst._phase:value())))
 end
 
+local function OnHPDirty(inst)
+    -- Decode the bucket back to a fraction (the HP bar reads this in M5).
+    print(string.format("[Gauntlet] client: objective HP -> %d%%",
+        math.floor(inst._objhp:value() / 200 * 100 + .5)))
+end
+
 local function fn()
     local inst = CreateEntity()
 
@@ -122,16 +150,19 @@ local function fn()
     inst.AnimState:SetFinalOffset(1)
 
     -- Replicated siege state. Declared on both sides, before SetPristine:
-    -- wave counter quantized to a smallbyte, phase enum to a tinybyte; set()
-    -- fires the dirty event only on real change.
+    -- wave counter quantized to a smallbyte, phase enum to a tinybyte, objective
+    -- HP to a 0..200 net_byte bucket; set() fires the dirty event only on real
+    -- change.
     inst._wave = net_smallbyte(inst.GUID, "gauntlet._wave", "gauntlet_wavedirty")
     inst._phase = net_tinybyte(inst.GUID, "gauntlet._phase", "gauntlet_phasedirty")
+    inst._objhp = net_byte(inst.GUID, "gauntlet._objhp", "gauntlet_hpdirty")
 
     inst.entity:SetPristine()
 
     if not TheWorld.ismastersim then
         inst:ListenForEvent("gauntlet_wavedirty", OnWaveDirty)
         inst:ListenForEvent("gauntlet_phasedirty", OnPhaseDirty)
+        inst:ListenForEvent("gauntlet_hpdirty", OnHPDirty)
         return inst
     end
 
@@ -148,6 +179,9 @@ local function fn()
     -- (DoDelta only applies this when the afflicter has the "player" tag, so
     -- mob damage — the lose bar — is untouched.)
     inst.components.health:SetAbsorptionAmountFromPlayer(TUNING.GAUNTLET_OBJECTIVE_PLAYER_ABSORB)
+    -- Seed the replicated HP bucket to full (SetMaxHealth doesn't fire
+    -- "healthdelta", so the listener below won't until the first hit).
+    PublishObjectiveHP(inst)
 
     -- Combat exists purely so attackers can target it; KeepTargetFn = false
     -- means it never holds a target of its own.

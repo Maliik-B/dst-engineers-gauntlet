@@ -141,6 +141,19 @@ local function GetSpawnPoint(pt)
     return offset ~= nil and pt + offset or nil
 end
 
+-- Optimized server->client wave announcement: ONE batched RPC carrying the
+-- whole wave (wave, count, tier), versus the naive per-spawn flood in
+-- SpawnOneAt. Server->client is trusted/unrated, so the cost on display is the
+-- send VOLUME -- one here vs one-per-attacker there. Counted into the same
+-- spawn-RPC metric so the A/B reads directly (e.g. 150 -> 1).
+local function SendWaveBatchRPC(wave, count, tier)
+    SendModRPCToClient(GetClientModRPC("EngineersGauntlet", "GauntletWaveIncoming"), nil, wave, count, tier or 1)
+    local metrics = TheWorld.components.gauntletmetrics
+    if metrics ~= nil then
+        metrics:CountSpawnRPC()
+    end
+end
+
 -- Spawn one attacker at pt, hand off the objective, track it, and (naive only)
 -- fire the per-spawn RPC tax. Callers guarantee _objective is valid.
 local function SpawnOneAt(pt)
@@ -175,6 +188,12 @@ local function SpawnAttacker()
     if _objective == nil or not _objective:IsValid() then
         return false
     end
+    -- Hard concurrent cap (back-pressure, not loss): the drip just retries next
+    -- tick, so a wave can't push live attackers past the ceiling -- it waits for
+    -- the field to thin. Bounds runaway spawning regardless of wave config.
+    if _numactive >= TUNING.GAUNTLET_MAX_ATTACKERS then
+        return false
+    end
     local pt = GetSpawnPoint(_objective:GetPosition())
     if pt == nil then
         return false
@@ -206,6 +225,11 @@ local function StartWave()
     _timetonextspawn = 0
     _warning = false
     SetPhase(PHASE.ACTIVE)
+    if not _naive then
+        -- Optimized: announce the whole wave to clients in ONE batched RPC up
+        -- front. The naive path instead emits one RPC per attacker as it drips.
+        SendWaveBatchRPC(_wavenum, _spawnsleft, 1)
+    end
     TheNet:Announce(string.format("Wave %d of %d! %d attackers seek the Engine.",
         _wavenum, TUNING.GAUNTLET_NUM_WAVES, _spawnsleft))
 end
@@ -354,15 +378,26 @@ function self:Stress(n)
     n = math.max(0, math.floor(tonumber(n) or 0))
     local objectivepos = _objective:GetPosition()
     local spawned = 0
+    local capped = false
     for _ = 1, n do
+        if _numactive >= TUNING.GAUNTLET_MAX_ATTACKERS then
+            capped = true
+            break
+        end
         local pt = GetSpawnPoint(objectivepos)
         if pt ~= nil then
             SpawnOneAt(pt)
             spawned = spawned + 1
         end
     end
-    print(string.format("[Gauntlet] c_stress: +%d/%d besiegers (active=%d, naive=%s)",
-        spawned, n, _numactive, tostring(_naive)))
+    if not _naive and spawned > 0 then
+        -- Optimized: one batched RPC for the whole stress dump (wave 0 = not a
+        -- real wave). Naive already fired one per spawn inside SpawnOneAt.
+        SendWaveBatchRPC(_wavenum, spawned, 1)
+    end
+    print(string.format("[Gauntlet] c_stress: +%d/%d besiegers (active=%d/%d, naive=%s)%s",
+        spawned, n, _numactive, TUNING.GAUNTLET_MAX_ATTACKERS, tostring(_naive),
+        capped and " — hit the concurrent cap" or ""))
     return spawned
 end
 

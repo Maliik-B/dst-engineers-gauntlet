@@ -57,8 +57,22 @@ TUNING.GAUNTLET_ATTACKER_MAX_CHASE = 10     -- short chase: kiting can't pull th
 TUNING.GAUNTLET_ATTACKER_LOST_DIST = 60     -- strays this far from the objective self-despawn...
 TUNING.GAUNTLET_ATTACKER_LOST_TIME = 5      -- ...after this many seconds
 
--- M2 naive path (the deliberately-unoptimized strawman, toggled by c_naive).
-TUNING.GAUNTLET_NAIVE_SCAN_RADIUS = 20      -- per-tick neighbour-scan radius (the O(N*k) cost)
+-- Load path (the naive-vs-optimized experiment, toggled by c_naive).
+TUNING.GAUNTLET_LOAD_SCAN_RADIUS = 20       -- neighbour-scan radius (the O(N*k) cost; both modes)
+TUNING.GAUNTLET_LOAD_SCAN_PERIOD = 0.5      -- optimized: throttle the scan to this cadence (naive = every tick)
+
+-- Hard concurrent-attacker cap. Always on: a safety ceiling that bounds runaway
+-- spawning (c_stress, huge waves) so the server can't be DoSed into the floor.
+-- Set comfortably above the demo's ~300 so it never distorts the A/B; the drip
+-- applies it as back-pressure (waits) and c_stress reports when it bites.
+--
+-- The cap is the shipped half of the spec's "pooling/caps" item; a true entity
+-- pool is deliberately deferred. The A/B scene holds an invincible objective, so
+-- attackers never die/recycle and a pool would show nothing here; and recycling
+-- DST mobs means short-circuiting the death stategraph + lootdropper + corpse
+-- pipeline, which is invasive and reads against "must feel native". The cap
+-- delivers the safety benefit at a fraction of the risk.
+TUNING.GAUNTLET_MAX_ATTACKERS = 500
 
 --------------------------------------------------------------------------
 -- Strings
@@ -74,16 +88,24 @@ _G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_ATTACKER = "It only has eyes for
 -- clients, both shard processes later) in a fixed order — registration order
 -- assigns the network ids, so the tables must line up everywhere.
 --
--- GauntletAttackerSpawned is the M2 naive strawman: the server fires ONE per
--- attacker spawn (server->client, trusted/unrated). M3 replaces it with a
--- single batched per-wave RPC. The handler body is intentionally trivial — the
--- cost on display is the per-spawn send volume, not the work here (a naive
--- client might ping/FX each spawn at (x, z)); it just tallies arrivals so the
--- flood is observable client-side via GAUNTLET_CLIENT_SPAWN_RPCS.
+-- Two server->client wave RPCs, registered in a FIXED order (registration
+-- order assigns the network id, so the tables must line up on every process):
+--
+--   GauntletAttackerSpawned — the NAIVE strawman: the server fires ONE per
+--     attacker spawn. The body is intentionally trivial; the cost on display is
+--     the per-spawn send VOLUME, not the work here. It tallies arrivals so the
+--     flood is observable client-side via GAUNTLET_CLIENT_SPAWN_RPCS.
+--   GauntletWaveIncoming — the OPTIMIZED counterpart: ONE batched RPC per wave
+--     (or per c_stress dump) carrying (wave, count, tier). Replaces the flood;
+--     drives the M5 wave-incoming banner/FX from a single atomic event.
 --------------------------------------------------------------------------
 
 AddClientModRPCHandler("EngineersGauntlet", "GauntletAttackerSpawned", function(x, z)
     _G.GAUNTLET_CLIENT_SPAWN_RPCS = (_G.GAUNTLET_CLIENT_SPAWN_RPCS or 0) + 1
+end)
+
+AddClientModRPCHandler("EngineersGauntlet", "GauntletWaveIncoming", function(wave, count, tier)
+    _G.GAUNTLET_CLIENT_WAVE_RPCS = (_G.GAUNTLET_CLIENT_WAVE_RPCS or 0) + 1
 end)
 
 --------------------------------------------------------------------------
@@ -185,7 +207,7 @@ _G.c_naive = function(enable)
     siegemanager:SetNaive(enable)
     print(string.format("[Gauntlet] naive path %s", siegemanager:IsNaive()
         and "ON — strawman (per-spawn RPC, per-tick non-sleeping update, net_float churn)"
-        or "off — optimized baseline"))
+        or "off — optimized (batched per-wave RPC, sleep-stop + throttled scan, no churn)"))
 end
 
 _G.c_metrics = function()
