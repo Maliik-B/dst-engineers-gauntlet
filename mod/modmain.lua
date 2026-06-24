@@ -8,11 +8,19 @@
 
 local _G = GLOBAL
 local TUNING = _G.TUNING
+local Ingredient = _G.Ingredient
+local GAUNTLET = require("gauntlet_constants")
+local MINION_COMMAND = GAUNTLET.MINION_COMMAND
+local TARGETING = require("gauntlet_targeting")
 
 PrefabFiles =
 {
     "gauntlet_objective",
     "gauntlet_attacker",
+    "gauntlet_turret",            -- M4 auto-turret (returns the placer too)
+    "gauntlet_turret_projectile",
+    "gauntlet_minion",            -- M4 commandable minion
+    "gauntlet_commander",         -- M4 held command tool (drives the command RPC)
 }
 
 --------------------------------------------------------------------------
@@ -75,6 +83,58 @@ TUNING.GAUNTLET_LOAD_SCAN_PERIOD = 0.5      -- optimized: throttle the scan to t
 TUNING.GAUNTLET_MAX_ATTACKERS = 500
 
 --------------------------------------------------------------------------
+-- Defense layer (M4). Auto-turret — the buildable "mech to manage", built on
+-- the eyeturret/Houndius-Shootius pattern (no power/circuit). The Winona
+-- catapult's battery is dropped (character-locked + an economy lever, out of
+-- v1 scope); its balance role is carried by the build-cap + recipe cost below.
+--------------------------------------------------------------------------
+
+TUNING.GAUNTLET_TURRET_HEALTH = 800
+TUNING.GAUNTLET_TURRET_REGEN = 8            -- HP healed per regen tick (self-repair)...
+TUNING.GAUNTLET_TURRET_REGEN_PERIOD = 1     -- ...every this many seconds; stops at full
+TUNING.GAUNTLET_TURRET_RANGE = 12           -- target-acquisition + firing radius
+TUNING.GAUNTLET_TURRET_DAMAGE = 40          -- per-hit AOE damage (attacker HP = 150)
+TUNING.GAUNTLET_TURRET_ATTACK_PERIOD = 2    -- seconds between shots (combat cooldown)
+TUNING.GAUNTLET_TURRET_AOE_RADIUS = 3       -- projectile blast radius
+TUNING.GAUNTLET_TURRET_WORK = 4             -- hammer hits to dismantle (refunds the recipe)
+-- The balance lever (stands in for the catapult battery): total turrets the
+-- arena allows. Raise/lower to tune firepower; one-line change.
+TUNING.GAUNTLET_TURRET_MAX = 4
+
+--------------------------------------------------------------------------
+-- Commandable minion (M4) — a recolored clockwork knight, owned per-player and
+-- commanded via a 3-verb vocabulary (defend / follow / focus). The 2nd, richer
+-- RPC surface (the command channel) lands in Phase 4c; the AI here is driven by
+-- the per-minion command state.
+--------------------------------------------------------------------------
+
+TUNING.GAUNTLET_MINION_HEALTH = 300
+TUNING.GAUNTLET_MINION_DAMAGE = 30
+TUNING.GAUNTLET_MINION_ATTACK_PERIOD = 2
+TUNING.GAUNTLET_MINION_ATTACK_RANGE = 2.5
+TUNING.GAUNTLET_MINION_HIT_RANGE = 3
+TUNING.GAUNTLET_MINION_SPEED = 6            -- walk = run (SGknight only walks); a touch faster than a player
+
+TUNING.GAUNTLET_MINION_TARGET_DIST = 10     -- auto-acquire attackers within this of the minion
+TUNING.GAUNTLET_MINION_KEEP_DIST = 16       -- drop targets beyond this from the anchor (anti-kite)
+TUNING.GAUNTLET_MINION_MAX_CHASE = 8        -- finite chase so a runner can't pull it off post
+
+TUNING.GAUNTLET_MINION_DEFEND_LEASH = 4     -- DEFEND: stray this far from the point -> walk back...
+TUNING.GAUNTLET_MINION_DEFEND_RETURN = 1    -- ...until within this of it
+TUNING.GAUNTLET_MINION_FOLLOW_MIN = 2       -- FOLLOW band around the owner: back off inside this...
+TUNING.GAUNTLET_MINION_FOLLOW_TARGET = 4    -- ...settle around this...
+TUNING.GAUNTLET_MINION_FOLLOW_MAX = 8       -- ...approach when beyond this
+TUNING.GAUNTLET_MINION_FOCUS_RESOLVE_RADIUS = 6 -- FOCUS picks the nearest attacker within this of the clicked point
+
+TUNING.GAUNTLET_MINION_REGEN = 5            -- self-repair HP per period...
+TUNING.GAUNTLET_MINION_REGEN_PERIOD = 1     -- ...every this many seconds; stops at full
+-- Per-player follower cap (the From Beyond compass→pulse precedent caps at 4).
+TUNING.GAUNTLET_MINION_MAX = 4
+-- Command-RPC anti-cheat: a commanded point must be within this of the sender
+-- (the server rejects out-of-range points so a client can't command at will).
+TUNING.GAUNTLET_COMMAND_MAX_DIST = 40
+
+--------------------------------------------------------------------------
 -- Strings
 --------------------------------------------------------------------------
 
@@ -82,6 +142,81 @@ _G.STRINGS.NAMES.GAUNTLET_OBJECTIVE = "Gauntlet Engine"
 _G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_OBJECTIVE = "If it falls, the gauntlet is lost."
 _G.STRINGS.NAMES.GAUNTLET_ATTACKER = "Besieger"
 _G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_ATTACKER = "It only has eyes for the Engine."
+_G.STRINGS.NAMES.GAUNTLET_TURRET = "Gauntlet Sentry"
+_G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_TURRET = "It holds the line so I don't have to."
+_G.STRINGS.NAMES.GAUNTLET_MINION = "Gauntlet Sentinel"
+_G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_MINION = "It follows my orders. Mostly."
+_G.STRINGS.NAMES.GAUNTLET_COMMANDER = "Sentinel Commander"
+_G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_COMMANDER = "Right-click to give the order: ground to hold, an enemy to focus, myself to follow."
+
+--------------------------------------------------------------------------
+-- Crafting (M4 defense layer). Character-agnostic: no builder_tag, so ANY
+-- character can build these. The turret is intentionally EARLY-game (Science
+-- Machine tier + cheap day-1 mats) because an arena run needs defenses from the
+-- start; the Houndius Shootius' boss/Ruins-gated Ancient recipe would arrive far
+-- too late to base ours on. Balance rides the build-cap (testfn) + cost, not a
+-- power/fuel economy (deferred to v2).
+--------------------------------------------------------------------------
+
+local TURRET_CAP_SCAN_RADIUS = 64 -- arena-scoped count for the build-cap
+
+local function TurretCapTestFn(pt, rot)
+    -- Placement gate (client ghost AND server build validation, like the shipped
+    -- IsMarshLand testfns): refuse once the arena holds GAUNTLET_TURRET_MAX
+    -- turrets. Counts the networked "gauntlet_turret" tag, visible on both sides.
+    -- Returns (can_build, mouse_blocked).
+    local ents = _G.TheSim:FindEntities(pt.x, 0, pt.z, TURRET_CAP_SCAN_RADIUS, { "gauntlet_turret" })
+    return #ents < TUNING.GAUNTLET_TURRET_MAX, false
+end
+
+AddRecipe2(
+    "gauntlet_turret",
+    { Ingredient("boards", 3), Ingredient("goldnugget", 2), Ingredient("cutstone", 2) },
+    _G.TECH.SCIENCE_ONE,
+    {
+        placer = "gauntlet_turret_placer",
+        min_spacing = 2,
+        testfn = TurretCapTestFn,
+        image = "winona_catapult.tex",
+    },
+    { "STRUCTURES" }
+)
+
+-- The command tool — an inventory item (any character), Science Machine tier.
+AddRecipe2(
+    "gauntlet_commander",
+    { Ingredient("goldnugget", 2), Ingredient("cutstone", 1), Ingredient("twigs", 2) },
+    _G.TECH.SCIENCE_ONE,
+    { image = "winona_remote.tex" },
+    { "TOOLS" }
+)
+
+-- Deploy the minion via a placer (same pattern as the turret). The per-player
+-- cap is enforced with canbuild (which has the builder), NOT testfn (which only
+-- gets the point) — canbuild runs server-side before spawning/charging, so at
+-- cap nothing is built. The minion binds its owner from the onbuilt event.
+local function MinionCapCanBuild(recipe, builder)
+    -- builder.components.leader is nil on clients (server-only component), so the
+    -- guard also keeps this safe wherever it may be evaluated client-side.
+    if builder ~= nil and builder.components.leader ~= nil
+        and builder.components.leader:CountFollowers("gauntlet_minion") >= TUNING.GAUNTLET_MINION_MAX then
+        return false
+    end
+    return true
+end
+
+AddRecipe2(
+    "gauntlet_minion",
+    { Ingredient("goldnugget", 3), Ingredient("cutstone", 2), Ingredient("twigs", 3) },
+    _G.TECH.SCIENCE_ONE,
+    {
+        placer = "gauntlet_minion_placer",
+        min_spacing = 1.5,
+        canbuild = MinionCapCanBuild,
+        image = "gears.tex",
+    },
+    { "STRUCTURES" }
+)
 
 --------------------------------------------------------------------------
 -- Mod RPC handlers. Registered unconditionally on every process (server,
@@ -117,6 +252,90 @@ end)
 AddClientModRPCHandler("EngineersGauntlet", "GauntletWaveIncoming", function(wave, count, tier)
     _G.GAUNTLET_CLIENT_WAVE_RPCS = _G.GAUNTLET_CLIENT_WAVE_RPCS + 1
 end)
+
+--------------------------------------------------------------------------
+-- Minion command RPC (M4) — the 2nd RPC surface, and the only CLIENT->SERVER
+-- one. It lives in its own id space (AddModRPCHandler), separate from the two
+-- server->client handlers above (AddClientModRPCHandler), so registering it does
+-- NOT shift their ids. Clients send INTENT only — (command_enum, x, z) scalars;
+-- the server validates and applies. The held commander's right-click sends it.
+--------------------------------------------------------------------------
+
+-- Prefer the engine's shipped validator (networkclientrpc.lua, "global so Mods
+-- can use them"); fall back to a plain type check so the handler is robust.
+local checknumber = _G.checknumber or function(v) return type(v) == "number" end
+
+AddModRPCHandler("EngineersGauntlet", "GauntletMinionCommand", function(player, command, x, z)
+    -- 1. type-validate every arg up front (the shipped RPC-handler idiom)
+    if not (checknumber(command) and checknumber(x) and checknumber(z)) then
+        return
+    end
+    -- 2. enum range-check
+    command = math.floor(command + 0.5)
+    if command ~= MINION_COMMAND.DEFEND
+        and command ~= MINION_COMMAND.FOLLOW
+        and command ~= MINION_COMMAND.FOCUS then
+        return
+    end
+    -- 3. component existence: only a player that can own minions
+    if player == nil or player.components.leader == nil then
+        return
+    end
+    -- 4. range clamp: the commanded point must be near the sender (anti-cheat —
+    --    a client can't direct minions to arbitrary world coordinates)
+    if player:GetDistanceSqToPoint(x, 0, z)
+        > TUNING.GAUNTLET_COMMAND_MAX_DIST * TUNING.GAUNTLET_COMMAND_MAX_DIST then
+        return
+    end
+    -- 5. apply to the SENDER's own minions only (ownership)
+    for _, minion in ipairs(player.components.leader:GetFollowersByTag("gauntlet_minion")) do
+        minion:SetMinionCommand(command, x, z)
+    end
+end)
+
+-- CLIENT command trigger: while the commander is equipped, an in-world right-
+-- click reads the cursor and fires the command RPC. Cursor context picks the
+-- verb (enemy -> FOCUS, self -> FOLLOW, ground -> DEFEND) — the 2-states + 1-
+-- order model. UI-consumed clicks never reach oncontrol (input.lua:166), and the
+-- server re-validates everything, so this client code only proposes intent.
+local function GetMinionCommandForCursor(player)
+    local target = _G.TheInput:GetWorldEntityUnderMouse()
+    if target == player then
+        return MINION_COMMAND.FOLLOW
+    elseif target ~= nil
+        and (target:HasTag("monster") or target:HasTag("hostile"))
+        and not (target:HasTag("player") or target:HasTag("companion") or target:HasTag("structure")) then
+        return MINION_COMMAND.FOCUS
+    end
+    return MINION_COMMAND.DEFEND
+end
+
+local function OnCommanderRightClick(down)
+    if not down then
+        return -- digitalvalue is false on release; fire on press only
+    end
+    local player = _G.ThePlayer
+    if player == nil then
+        return
+    end
+    local inventory = player.replica.inventory
+    local equipped = inventory ~= nil and inventory:GetEquippedItem(_G.EQUIPSLOTS.HANDS) or nil
+    if equipped == nil or equipped.prefab ~= "gauntlet_commander" then
+        return
+    end
+    local pos = _G.TheInput:GetWorldPosition()
+    if pos == nil then
+        return
+    end
+    SendModRPCToServer(GetModRPC("EngineersGauntlet", "GauntletMinionCommand"),
+        GetMinionCommandForCursor(player), pos.x, pos.z)
+end
+
+-- Register once. Clients (and the host) have TheInput; a dedicated server does
+-- not drive input, so the gate inside is moot there.
+if _G.TheInput ~= nil then
+    _G.TheInput:AddControlHandler(_G.CONTROL_SECONDARY, OnCommanderRightClick)
+end
 
 --------------------------------------------------------------------------
 -- World components. Master-sim only (mirrors how forest.lua attaches its
@@ -255,6 +474,97 @@ _G.c_metrics_reset = function()
         metrics:ResetCounters()
         GauntletReport("[Gauntlet] metrics counters reset")
     end
+end
+
+--------------------------------------------------------------------------
+-- Minion harness (M4 Phase 4b). Drives the server-side command apply directly
+-- for fast iteration; the real client->server command RPC + held tool land in
+-- Phase 4c. All commands operate on the CALLING player's owned minions, so they
+-- must be run from a connected client's remote console (ConsoleCommandPlayer is
+-- nil with no players).
+--   c_minion_spawn()  — deploy a minion at you, owned by you (DEFEND here)
+--   c_minion_defend() — your minions hold your current position
+--   c_minion_follow() — your minions follow you
+--   c_minion_focus()  — your minions focus the nearest attacker to you
+--------------------------------------------------------------------------
+
+local function GetConsoleMinions()
+    local player = _G.ConsoleCommandPlayer()
+    if player == nil or player.components.leader == nil then
+        print("[Gauntlet] minion commands need a connected player — run from the client remote console")
+        return nil, nil
+    end
+    return player, player.components.leader:GetFollowersByTag("gauntlet_minion")
+end
+
+_G.c_minion_spawn = function()
+    if _G.TheWorld == nil or not _G.TheWorld.ismastersim then
+        print("[Gauntlet] master-sim only — use the remote console")
+        return
+    end
+    local player = _G.ConsoleCommandPlayer()
+    if player == nil then
+        print("[Gauntlet] no player to deploy at")
+        return
+    end
+    local pos = player:GetPosition()
+    local minion = _G.SpawnPrefab("gauntlet_minion")
+    minion.Transform:SetPosition(pos:Get())
+    if not minion:SetMinionOwner(player) then
+        print(string.format("[Gauntlet] at the minion cap (%d) — dismiss one first", TUNING.GAUNTLET_MINION_MAX))
+        minion:Remove()
+        return
+    end
+    minion:SetMinionCommand(MINION_COMMAND.DEFEND, pos.x, pos.z)
+    print("[Gauntlet] Sentinel deployed and bound to you (DEFEND here)")
+end
+
+local function CommandConsoleMinions(mode, label, usepos)
+    local player, minions = GetConsoleMinions()
+    if minions == nil then
+        return
+    end
+    local pos = usepos and player:GetPosition() or nil
+    local n = 0
+    for _, m in ipairs(minions) do
+        if m:SetMinionCommand(mode, pos and pos.x or nil, pos and pos.z or nil) then
+            n = n + 1
+        end
+    end
+    print(string.format("[Gauntlet] %d/%d Sentinel(s) -> %s", n, #minions, label))
+end
+
+_G.c_minion_defend = function() CommandConsoleMinions(MINION_COMMAND.DEFEND, "DEFEND here", true) end
+_G.c_minion_follow = function() CommandConsoleMinions(MINION_COMMAND.FOLLOW, "FOLLOW you", false) end
+
+-- FOCUS picks the nearest attacker to YOU within a wide radius and sends that
+-- attacker's position (so you needn't stand on the swarm). The 4c command tool
+-- will instead pass the exact right-clicked attacker's position.
+_G.c_minion_focus = function()
+    local player, minions = GetConsoleMinions()
+    if minions == nil then
+        return
+    end
+    local pos = player:GetPosition()
+    local nearest, ndsq = nil, math.huge
+    for _, v in ipairs(_G.TheSim:FindEntities(pos.x, 0, pos.z, 40, TARGETING.ENEMY_MUST_TAGS, TARGETING.ENEMY_CANT_TAGS, TARGETING.ENEMY_ONEOF_TAGS)) do
+        local dsq = v:GetDistanceSqToPoint(pos.x, 0, pos.z)
+        if dsq < ndsq then
+            nearest, ndsq = v, dsq
+        end
+    end
+    if nearest == nil then
+        print("[Gauntlet] c_minion_focus: no enemy nearby to focus (c_stress first)")
+        return
+    end
+    local fp = nearest:GetPosition()
+    local n = 0
+    for _, m in ipairs(minions) do
+        if m:SetMinionCommand(MINION_COMMAND.FOCUS, fp.x, fp.z) then
+            n = n + 1
+        end
+    end
+    print(string.format("[Gauntlet] %d/%d Sentinel(s) -> FOCUS attacker at (%.1f, %.1f)", n, #minions, fp.x, fp.z))
 end
 
 print("[Gauntlet] modmain loaded (wave_size=" .. tostring(TUNING.GAUNTLET_WAVE_SIZE) .. ")")

@@ -18,7 +18,24 @@ for k, v in pairs(PHASE) do
     PHASE_NAMES[v] = k
 end
 
+-- Minion command enum (the 3-verb vocabulary). Replicated in a net_tinybyte
+-- ([0..7]) on the minion, set() only on change, so this table must never exceed
+-- 8 values. DEFEND is the spawn default (hold the deploy spot).
+local MINION_COMMAND =
+{
+    DEFEND = 0, -- hold a fixed point; engage attackers that come within range
+    FOLLOW = 1, -- follow the owning player; engage attackers along the way
+    FOCUS  = 2, -- attack one chosen attacker, then revert to DEFEND when it dies
+}
+
+local MINION_COMMAND_NAMES = {}
+for k, v in pairs(MINION_COMMAND) do
+    MINION_COMMAND_NAMES[v] = k
+end
+
 return {
     PHASE = PHASE,
     PHASE_NAMES = PHASE_NAMES,
+    MINION_COMMAND = MINION_COMMAND,
+    MINION_COMMAND_NAMES = MINION_COMMAND_NAMES,
 }

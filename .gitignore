@@ -7,6 +7,7 @@ CLAUDE.md
 
 # Dev server logs (transient, written by the local dedicated server)
 tools/*.log
+tools/serverlog_*.txt
 
 # Archives / OS noise
 *.zip
