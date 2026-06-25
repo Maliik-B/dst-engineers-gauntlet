@@ -93,6 +93,12 @@ local function SetSiegeWave(inst, wave)
     inst._wave:set(math.clamp(wave, 0, 63))
 end
 
+local function SetSiegeMaxWave(inst, maxwave)
+    -- The run's total wave count, replicated so the HUD reads the server's value
+    -- (not the client's local TUNING). Constant per run -> set once, no churn.
+    inst._maxwave:set(math.clamp(maxwave, 0, 63))
+end
+
 local function SetSiegePhase(inst, phase)
     inst._phase:set(phase)
 end
@@ -156,6 +162,10 @@ local function fn()
     inst._wave = net_smallbyte(inst.GUID, "gauntlet._wave", "gauntlet_wavedirty")
     inst._phase = net_tinybyte(inst.GUID, "gauntlet._phase", "gauntlet_phasedirty")
     inst._objhp = net_byte(inst.GUID, "gauntlet._objhp", "gauntlet_hpdirty")
+    -- Run's total wave count (constant per run); the HUD reads this instead of the
+    -- client's local TUNING, so it's always server-authoritative. No dirty event:
+    -- the HUD polls it each frame.
+    inst._maxwave = net_smallbyte(inst.GUID, "gauntlet._maxwave")
 
     inst.entity:SetPristine()
 
@@ -198,8 +208,12 @@ local function fn()
     inst:ListenForEvent("death", OnDeath)
 
     inst.SetSiegeWave = SetSiegeWave
+    inst.SetSiegeMaxWave = SetSiegeMaxWave
     inst.SetSiegePhase = SetSiegePhase
     inst.PlayWarningGrowl = PlayWarningGrowl
+    -- Seed the total now so the HUD reads a valid count immediately; the
+    -- siegemanager re-asserts it on registration (authoritative).
+    SetSiegeMaxWave(inst, TUNING.GAUNTLET_NUM_WAVES)
 
     -- Self-registration with the siege manager; runs on fresh placement AND
     -- on save-load, so the manager's objective reference is self-healing.

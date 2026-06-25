@@ -93,7 +93,14 @@ local function OnHealthDelta(inst)
     local health = inst.components.health
     if health:IsDead() then
         return
-    elseif health:GetPercent() >= 1 then
+    end
+    -- Wear feedback: the catapult art has no damage tiers, so shift the amber
+    -- tint smoothly toward red as HP drops (and back as it self-repairs) by
+    -- fading the green/blue channels — a continuous gradient (not additive red,
+    -- which barely reads at high HP), so the damage level is legible at a glance.
+    local hurt = 1 - health:GetPercent()
+    inst.AnimState:SetMultColour(1, .82 - .72 * hurt, .5 - .42 * hurt, 1)
+    if health:GetPercent() >= 1 then
         health:StopRegen()
     else
         health:StartRegen(TUNING.GAUNTLET_TURRET_REGEN, TUNING.GAUNTLET_TURRET_REGEN_PERIOD)
@@ -108,6 +115,19 @@ local function OnHammered(inst)
     fx:SetMaterial("stone")
     inst.components.lootdropper:DropLoot()
     inst:Remove()
+end
+
+-- Examine condition: server-side getstatus by HP% (the describe table keys off
+-- it). Full or dead -> nil, so full reads GENERIC and death falls to the
+-- inspectable component's own "DEAD" status.
+local function GetTurretStatus(inst)
+    local pct = inst.components.health:GetPercent()
+    if pct <= 0 or pct >= 1 then
+        return nil
+    elseif pct <= .33 then
+        return "CRITICAL"
+    end
+    return "DAMAGED"
 end
 
 local function fn()
@@ -135,6 +155,7 @@ local function fn()
     inst:AddTag("companion")    -- player-side ally for combat ally checks
     inst:AddTag("noauradamage")
     inst:AddTag("gauntlet_turret")
+    inst:AddTag("gauntlet_defense") -- what the M5 Breaker attacker hunts
 
     inst.entity:SetPristine()
 
@@ -143,6 +164,7 @@ local function fn()
     end
 
     inst:AddComponent("inspectable")
+    inst.components.inspectable.getstatus = GetTurretStatus
 
     inst:AddComponent("health")
     inst.components.health:SetMaxHealth(TUNING.GAUNTLET_TURRET_HEALTH)

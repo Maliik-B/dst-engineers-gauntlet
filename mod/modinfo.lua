@@ -5,9 +5,9 @@
 name = "Engineer's Gauntlet"
 description = [[Co-op wave defense. Escalating sieges path to a defended objective — hold the line with buildable auto-turrets and a commandable minion. Any character can defend.
 
-v0.4 — optimization pass: sleep/wake self-stop, quantized+diffed netvars, batched per-wave RPC, concurrent cap, bracketed compute metrics (c_stress, c_naive, c_metrics).]]
+v0.5 — finished + fun: three attacker types (rusher / fast swarm / defense-breaker), an on-screen siege HUD, examine-readable condition + commands, damage-tier wear on your defenses, and configurable wave count / size / interval.]]
 author = "Maliik Bryan"
-version = "0.4.0"
+version = "0.5.0"
 
 api_version = 10
 
@@ -34,5 +34,28 @@ configuration_options = {
             { description = "Stress (80)", data = 80 },
         },
         default = 10,
+    },
+    {
+        name = "num_waves",
+        label = "Waves to Survive",
+        hover = "How many waves the Engine must hold before victory.",
+        options = {
+            { description = "Short (3)",     data = 3 },
+            { description = "Default (5)",   data = 5 },
+            { description = "Long (8)",      data = 8 },
+            { description = "Marathon (12)", data = 12 },
+        },
+        default = 5,
+    },
+    {
+        name = "wave_interval",
+        label = "Wave Interval",
+        hover = "Breathing room between waves, in seconds.",
+        options = {
+            { description = "Frantic (30s)", data = 30 },
+            { description = "Default (60s)", data = 60 },
+            { description = "Relaxed (90s)", data = 90 },
+        },
+        default = 60,
     },
 }
