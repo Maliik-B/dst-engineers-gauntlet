@@ -101,9 +101,21 @@ local states =
             inst.AnimState:PlayAnimation("death")
             inst.SoundEmitter:PlaySound("dontstarve/common/together/catapult/destroy")
             RemovePhysicsColliders(inst)
+            inst.sg:SetTimeout(2) -- fallback removal if "animover" doesn't fire
             -- No loot on combat-death: the hammer (workable) is the intentional
-            -- refund path. A turret beaten down by the swarm is simply lost.
+            -- refund path. A destroyed turret is simply lost — and removes itself
+            -- after the death anim so it can't linger as rubble that still counts
+            -- against the build cap (it keeps its tag while it exists).
         end,
+        ontimeout = function(inst)
+            inst:Remove()
+        end,
+        events =
+        {
+            EventHandler("animover", function(inst)
+                inst:Remove()
+            end),
+        },
     },
 }
 

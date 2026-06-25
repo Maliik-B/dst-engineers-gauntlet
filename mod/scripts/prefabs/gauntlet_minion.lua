@@ -92,7 +92,13 @@ local function OnHealthDelta(inst)
     local health = inst.components.health
     if health:IsDead() then
         return
-    elseif health:GetPercent() >= 1 then
+    end
+    -- Wear feedback: the knight art has no damage tiers, so shift the cyan tint
+    -- smoothly toward red as HP drops (and back as it self-repairs) — a continuous
+    -- gradient so the damage level is legible at a glance.
+    local hurt = 1 - health:GetPercent()
+    inst.AnimState:SetMultColour(.5 + .5 * hurt, .78 - .58 * hurt, 1 - .8 * hurt, 1)
+    if health:GetPercent() >= 1 then
         health:StopRegen()
     else
         health:StartRegen(TUNING.GAUNTLET_MINION_REGEN, TUNING.GAUNTLET_MINION_REGEN_PERIOD)
@@ -239,6 +245,13 @@ local function PlacerPostInit(inst)
     inst.AnimState:SetMultColour(.5, .78, 1, 1) -- ghost matches the cyan minion
 end
 
+-- Examine reflects the current command. Server-side (getstatus runs where the
+-- command state lives); keyed into the DESCRIBE table.
+local CMD_STATUS = { [CMD.DEFEND] = "DEFEND", [CMD.FOLLOW] = "FOLLOW", [CMD.FOCUS] = "FOCUS" }
+local function GetMinionStatus(inst)
+    return CMD_STATUS[inst._command]
+end
+
 local function fn()
     local inst = CreateEntity()
 
@@ -262,6 +275,7 @@ local function fn()
     inst:AddTag("companion")        -- player-side ally (combat ally checks)
     inst:AddTag("character")
     inst:AddTag("gauntlet_minion")
+    inst:AddTag("gauntlet_defense") -- what the M5 Breaker attacker hunts
 
     -- Replicated command mode: ONE net_tinybyte, declared both sides pre-pristine,
     -- set() only on change (no churn). Drives the HUD command readout later.
@@ -332,6 +346,7 @@ local function fn()
     inst:AddComponent("lootdropper")
 
     inst:AddComponent("inspectable")
+    inst.components.inspectable.getstatus = GetMinionStatus
     inst:AddComponent("knownlocations")
 
     MakeMediumBurnableCharacter(inst, "spring")

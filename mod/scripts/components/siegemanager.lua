@@ -39,6 +39,7 @@ local _warning = false
 local _timetonextwarnsound = 0
 local _updating = false
 local _naive = false -- M2 load dial: deliberately-naive code path (c_naive)
+local _resulttask = nil -- pending VICTORY/DEFEAT -> IDLE return (the results window)
 
 --------------------------------------------------------------------------
 --[[ Private: state plumbing ]]
@@ -58,6 +59,12 @@ local function SetUpdating(enable)
 end
 
 local function SetPhase(phase)
+    -- Leaving a terminal phase (a new run, a stop, or the results window expiring)
+    -- cancels the pending auto-return to IDLE.
+    if phase ~= PHASE.VICTORY and phase ~= PHASE.DEFEAT and _resulttask ~= nil then
+        _resulttask:Cancel()
+        _resulttask = nil
+    end
     _phase = phase
     if _objective ~= nil and _objective:IsValid() then
         _objective:SetSiegePhase(phase)
@@ -68,6 +75,10 @@ local function SetWave(wave)
     _wavenum = wave
     if _objective ~= nil and _objective:IsValid() then
         _objective:SetSiegeWave(wave)
+        -- Re-assert the replicated total here too (set-on-change, no churn) so a
+        -- server-side NUM_WAVES change reflects on the next siege without a
+        -- re-place — SetWave(0) runs at every fresh-run start.
+        _objective:SetSiegeMaxWave(TUNING.GAUNTLET_NUM_WAVES)
     end
 end
 
@@ -154,10 +165,43 @@ local function SendWaveBatchRPC(wave, count, tier)
     end
 end
 
--- Spawn one attacker at pt, hand off the objective, track it, and (naive only)
--- fire the per-spawn RPC tax. Callers guarantee _objective is valid.
-local function SpawnOneAt(pt)
-    local attacker = SpawnPrefab("gauntlet_attacker")
+-- Wave roster: which attacker types are eligible per wave, weighted. Early waves
+-- are pure Besiegers; the Swarmer joins at wave 2 and the Breaker at wave 3, so
+-- difficulty + variety ramp together. Extensible — v2's ranged type is one row.
+local WAVE_ROSTER =
+{
+    { prefab = "gauntlet_attacker", weight = 1.0, minwave = 1 }, -- Besieger (baseline)
+    { prefab = "gauntlet_swarmer",  weight = 0.7, minwave = 2 }, -- fast chaff
+    { prefab = "gauntlet_breaker",  weight = 0.4, minwave = 3 }, -- defense-smasher
+}
+
+local function PickAttackerPrefab(wave)
+    local total, eligible = 0, {}
+    for _, e in ipairs(WAVE_ROSTER) do
+        if wave >= e.minwave then
+            total = total + e.weight
+            eligible[#eligible + 1] = e
+        end
+    end
+    if total <= 0 then
+        return "gauntlet_attacker"
+    end
+    local roll = math.random() * total
+    for _, e in ipairs(eligible) do
+        roll = roll - e.weight
+        if roll <= 0 then
+            return e.prefab
+        end
+    end
+    return "gauntlet_attacker"
+end
+
+-- Spawn one attacker (prefab `prefab`, default the Besieger) at pt, hand off the
+-- objective, track it, and (naive only) fire the per-spawn RPC tax. All attacker
+-- types share entitytracker + the brain, so the handoff is uniform. Callers
+-- guarantee _objective is valid.
+local function SpawnOneAt(pt, prefab)
+    local attacker = SpawnPrefab(prefab or "gauntlet_attacker")
     -- Objective handoff: stamped per-spawn so the brain's leash/siege nodes
     -- and the anti-kiting gates all read the same tracked entity.
     attacker.components.entitytracker:TrackEntity("gauntlet_objective", _objective)
@@ -198,7 +242,9 @@ local function SpawnAttacker()
     if pt == nil then
         return false
     end
-    SpawnOneAt(pt)
+    -- Wave attackers are a roster mix that ramps by wave; c_stress stays pure
+    -- Besieger for a clean uniform load A/B (see Stress).
+    SpawnOneAt(pt, PickAttackerPrefab(_wavenum))
     return true
 end
 
@@ -238,9 +284,24 @@ local function OnWaveTimerDone()
     StartWave()
 end
 
+-- After a win/loss, hold the result for a window, then return to IDLE on its own
+-- (the HUD clears, state resets; the objective stays for a rematch). SetPhase
+-- cancels this if a new run starts first.
+local function ScheduleResultsWindow()
+    if _resulttask ~= nil then
+        _resulttask:Cancel()
+    end
+    _resulttask = inst:DoTaskInTime(TUNING.GAUNTLET_RESULT_DISPLAY, function()
+        _resulttask = nil
+        SetWave(0)
+        SetPhase(PHASE.IDLE)
+    end)
+end
+
 local function Victory()
     SetPhase(PHASE.VICTORY)
     SetUpdating(false)
+    ScheduleResultsWindow()
     TheNet:Announce(string.format("Victory! The Engine survived all %d waves.", _wavenum))
 end
 
@@ -252,6 +313,7 @@ local function Defeat()
     end
     SetUpdating(false)
     RemoveAllAttackers(true)
+    ScheduleResultsWindow()
     TheNet:Announce("The Engine has fallen. The gauntlet is lost.")
 end
 
@@ -293,6 +355,7 @@ local function RegisterObjective(objective)
     inst:ListenForEvent("onremove", OnObjectiveRemoved, objective)
     -- A newly placed (or just-loaded) objective renders current siege state.
     objective:SetSiegeWave(_wavenum)
+    objective:SetSiegeMaxWave(TUNING.GAUNTLET_NUM_WAVES)
     objective:SetSiegePhase(_phase)
 end
 
@@ -367,7 +430,7 @@ end
 -- load measurement. Tracked like wave attackers, so c_gauntlet_stop() clears
 -- them; intended for raw-load tests in IDLE, but valid in any non-terminal
 -- phase (during a wave it simply adds to the live count).
-function self:Stress(n)
+function self:Stress(n, prefab)
     if _objective == nil or not _objective:IsValid() then
         print("[Gauntlet] no objective placed — run c_gauntlet_place() first")
         return 0
@@ -375,6 +438,7 @@ function self:Stress(n)
         print("[Gauntlet] the Engine is destroyed — place a fresh one first")
         return 0
     end
+    prefab = prefab or "gauntlet_attacker"
     n = math.max(0, math.floor(tonumber(n) or 0))
     local objectivepos = _objective:GetPosition()
     local spawned = 0
@@ -386,7 +450,8 @@ function self:Stress(n)
         end
         local pt = GetSpawnPoint(objectivepos)
         if pt ~= nil then
-            SpawnOneAt(pt)
+            -- Default (c_stress) = Besieger: uniform load for the c_naive A/B.
+            SpawnOneAt(pt, prefab)
             spawned = spawned + 1
         end
     end
@@ -395,8 +460,8 @@ function self:Stress(n)
         -- real wave). Naive already fired one per spawn inside SpawnOneAt.
         SendWaveBatchRPC(_wavenum, spawned, 1)
     end
-    print(string.format("[Gauntlet] c_stress: +%d/%d besiegers (active=%d/%d, naive=%s)%s",
-        spawned, n, _numactive, TUNING.GAUNTLET_MAX_ATTACKERS, tostring(_naive),
+    print(string.format("[Gauntlet] c_stress: +%d/%d %s (active=%d/%d, naive=%s)%s",
+        spawned, n, prefab, _numactive, TUNING.GAUNTLET_MAX_ATTACKERS, tostring(_naive),
         capped and " — hit the concurrent cap" or ""))
     return spawned
 end
@@ -511,6 +576,11 @@ function self:OnLoad(data)
     data = data or {}
     _wavenum = data.wave or 0
     local loadedphase = data.phase or PHASE.IDLE
+    -- A finished run's end-screen shouldn't return on reload; resume at IDLE
+    -- (the objective re-registers and renders IDLE, so the HUD stays hidden).
+    if loadedphase == PHASE.VICTORY or loadedphase == PHASE.DEFEAT then
+        loadedphase = PHASE.IDLE
+    end
     _phase = loadedphase
 
     if loadedphase == PHASE.ACTIVE then

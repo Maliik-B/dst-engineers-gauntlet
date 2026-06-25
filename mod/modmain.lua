@@ -17,6 +17,7 @@ PrefabFiles =
 {
     "gauntlet_objective",
     "gauntlet_attacker",
+    "gauntlet_spiderattackers",   -- M5 Breaker + Swarmer (one file returns both)
     "gauntlet_turret",            -- M4 auto-turret (returns the placer too)
     "gauntlet_turret_projectile",
     "gauntlet_minion",            -- M4 commandable minion
@@ -29,12 +30,13 @@ PrefabFiles =
 --------------------------------------------------------------------------
 
 TUNING.GAUNTLET_WAVE_SIZE = GetModConfigData("wave_size") or 10
-TUNING.GAUNTLET_NUM_WAVES = 5
+TUNING.GAUNTLET_NUM_WAVES = GetModConfigData("num_waves") or 5
 TUNING.GAUNTLET_WAVE_GROWTH = .5            -- fraction of base size added per wave
 
 TUNING.GAUNTLET_FIRST_WAVE_DELAY = 30       -- seconds from c_gauntlet_start() to wave 1
-TUNING.GAUNTLET_WAVE_DELAY = 60             -- inter-wave clock (worldsettingstimer maxtime)
+TUNING.GAUNTLET_WAVE_DELAY = GetModConfigData("wave_interval") or 60 -- inter-wave clock (worldsettingstimer maxtime)
 TUNING.GAUNTLET_WARN_DURATION = 15          -- growl-warning window before each wave
+TUNING.GAUNTLET_RESULT_DISPLAY = 15         -- seconds a VICTORY/DEFEAT shows before the run returns to IDLE
 
 TUNING.GAUNTLET_SPAWN_DIST = 30             -- spawn ring radius around the objective
 TUNING.GAUNTLET_SPAWN_INTERVAL_BASE = 1     -- drip-release: one spawn per interval...
@@ -81,6 +83,25 @@ TUNING.GAUNTLET_LOAD_SCAN_PERIOD = 0.5      -- optimized: throttle the scan to t
 -- pipeline, which is invasive and reads against "must feel native". The cap
 -- delivers the safety benefit at a fraction of the risk.
 TUNING.GAUNTLET_MAX_ATTACKERS = 500
+
+--------------------------------------------------------------------------
+-- M5 attacker roster — 2 new types. They reuse the GAUNTLET_ATTACKER_* brain
+-- gating (aggro/target/return/keep distances); only per-type stats differ.
+--------------------------------------------------------------------------
+
+-- Breaker: tanky, slow, big hits; hunts the defense layer (the survive-swarm demo).
+TUNING.GAUNTLET_BREAKER_HEALTH = 400
+TUNING.GAUNTLET_BREAKER_DAMAGE = 40
+TUNING.GAUNTLET_BREAKER_ATTACK_PERIOD = 3
+TUNING.GAUNTLET_BREAKER_ATTACK_RANGE = 3
+TUNING.GAUNTLET_BREAKER_SPEED = 5
+
+-- Swarmer: fast, fragile chaff; chases the defending player like the Besieger.
+TUNING.GAUNTLET_SWARMER_HEALTH = 60
+TUNING.GAUNTLET_SWARMER_DAMAGE = 10
+TUNING.GAUNTLET_SWARMER_ATTACK_PERIOD = 1.5
+TUNING.GAUNTLET_SWARMER_ATTACK_RANGE = 2.5
+TUNING.GAUNTLET_SWARMER_SPEED = 14
 
 --------------------------------------------------------------------------
 -- Defense layer (M4). Auto-turret — the buildable "mech to manage", built on
@@ -142,10 +163,29 @@ _G.STRINGS.NAMES.GAUNTLET_OBJECTIVE = "Gauntlet Engine"
 _G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_OBJECTIVE = "If it falls, the gauntlet is lost."
 _G.STRINGS.NAMES.GAUNTLET_ATTACKER = "Besieger"
 _G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_ATTACKER = "It only has eyes for the Engine."
+_G.STRINGS.NAMES.GAUNTLET_BREAKER = "Breaker"
+_G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_BREAKER = "It goes for the machines first."
+_G.STRINGS.NAMES.GAUNTLET_SWARMER = "Swarmling"
+_G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_SWARMER = "Alone, nothing. In a tide, a problem."
 _G.STRINGS.NAMES.GAUNTLET_TURRET = "Gauntlet Sentry"
-_G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_TURRET = "It holds the line so I don't have to."
+-- DESCRIBE is a table so examine reflects condition (getstatus by HP%); the
+-- describe system indexes it by the status key with a GENERIC fallback.
+_G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_TURRET =
+{
+    GENERIC = "It holds the line so I don't have to.",
+    DAMAGED = "It's taken a beating, but it's still firing.",
+    CRITICAL = "It won't hold much longer!",
+    DEAD = "So much for that one.",
+}
 _G.STRINGS.NAMES.GAUNTLET_MINION = "Gauntlet Sentinel"
-_G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_MINION = "It follows my orders. Mostly."
+-- Examine reflects the minion's current command (getstatus by command mode).
+_G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_MINION =
+{
+    GENERIC = "It follows my orders. Mostly.",
+    DEFEND = "It's holding the position I gave it.",
+    FOLLOW = "It's keeping pace with me.",
+    FOCUS = "It's hunting down a target.",
+}
 _G.STRINGS.NAMES.GAUNTLET_COMMANDER = "Sentinel Commander"
 _G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_COMMANDER = "Right-click to give the order: ground to hold, an enemy to focus, myself to follow."
 
@@ -350,6 +390,19 @@ AddPrefabPostInit("world", function(inst)
 end)
 
 --------------------------------------------------------------------------
+-- Client HUD (M5). A top-center siege-status readout (wave + Engine HP), drawn
+-- from the objective's replicated netvars. AddClassPostConstruct only fires
+-- where the player HUD is actually built (clients + host), so there's nothing to
+-- guard for the dedicated server — it never constructs the controls widget.
+--------------------------------------------------------------------------
+
+local GauntletHUD = require("widgets/gauntlethud")
+
+AddClassPostConstruct("widgets/controls", function(controls)
+    controls.gauntlethud = controls.top_root:AddChild(GauntletHUD(controls.owner))
+end)
+
+--------------------------------------------------------------------------
 -- Player-centric console harness (runs server-side via the remote console).
 -- Observation/balancing rides the built-ins — c_godmode, c_freecrafting,
 -- c_speedmult, c_spawn — those are not rebuilt here.
@@ -436,6 +489,22 @@ _G.c_stress = function(n)
     local siegemanager = GetSiegeManager()
     if siegemanager ~= nil then
         return siegemanager:Stress(n or 10)
+    end
+end
+
+-- Spawn a specific M5 roster type on the objective (with the objective handoff),
+-- to test the new attackers without grinding to their wave.
+_G.c_breaker = function(n)
+    local siegemanager = GetSiegeManager()
+    if siegemanager ~= nil then
+        return siegemanager:Stress(n or 5, "gauntlet_breaker")
+    end
+end
+
+_G.c_swarmer = function(n)
+    local siegemanager = GetSiegeManager()
+    if siegemanager ~= nil then
+        return siegemanager:Stress(n or 20, "gauntlet_swarmer")
     end
 end
 
