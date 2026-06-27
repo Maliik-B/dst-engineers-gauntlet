@@ -17,6 +17,12 @@ local assets =
 -- equipping invisibly. Runs master-side; the symbol override replicates to clients.
 local function OnEquip(inst, owner)
     owner.AnimState:OverrideSymbol("swap_object", "winona_remote", "swap_remote")
+    -- Recolor the held remote with a loud GREEN additive glow (the remote's own LED
+    -- colour). Green is the peak of human luminance, so it stays the brightest thing on
+    -- screen under any colour-cube grade (it never blends into warm afternoon light like
+    -- amber, nor washes into the blue full-moon grade); loud so it survives the night
+    -- desaturation. Off the warm<->cool axis the day/night cycle rides.
+    owner.AnimState:SetSymbolAddColour("swap_object", .18, .7, .2, 0)
     owner.AnimState:Show("ARM_carry")
     owner.AnimState:Hide("ARM_normal")
 end
@@ -25,6 +31,7 @@ local function OnUnequip(inst, owner)
     owner.AnimState:Hide("ARM_carry")
     owner.AnimState:Show("ARM_normal")
     owner.AnimState:ClearOverrideSymbol("swap_object")
+    owner.AnimState:SetSymbolAddColour("swap_object", 0, 0, 0, 0) -- clear the glow, else the next hand item inherits it
 end
 
 local function fn()
@@ -39,6 +46,10 @@ local function fn()
     inst.AnimState:SetBank("winona_remote")
     inst.AnimState:SetBuild("winona_remote")
     inst.AnimState:PlayAnimation("idle")
+    -- Loud green additive recolor (the remote's own LED colour) — green's peak luminance
+    -- keeps it the brightest thing on screen under any time-of-day grade (world + float;
+    -- held tinted the same in OnEquip).
+    inst.AnimState:SetAddColour(.18, .7, .2, 0)
 
     inst:AddTag("gauntlet_commander")
 
@@ -53,10 +64,10 @@ local function fn()
     inst:AddComponent("inspectable")
 
     inst:AddComponent("inventoryitem")
-    -- Stopgap slot icon: point at the shipped winona_remote inventory image so the
-    -- slot isn't blank. A distinct amber recolor atlas is queued for the art pass —
-    -- the inventory slot can't be runtime-tinted (itemtile draws straight from the
-    -- item's atlas), so distinctness needs a real recolored .tex, not a tint call.
+    -- Slot icon: the world + held visual are runtime-tinted green (above / OnEquip),
+    -- but itemtile draws the slot straight from the .tex and can't be tinted — so the
+    -- slot falls back to the shipped winona_remote image. A bespoke recolored atlas is
+    -- optional future polish, not a gap.
     inst.components.inventoryitem:ChangeImageName("winona_remote")
 
     inst:AddComponent("equippable")
