@@ -11,10 +11,11 @@ evidence.
 repair and retry). M0–M5 plus a Klei-quality parity/balance pass are done; M6 (public release:
 writeup + Workshop upload) is in progress.
 
-<!-- TODO(M6): replace with the captured A/B clip at docs/media/naive-vs-optimized.gif -->
-> 🎥 **Demo (capture pending):** the same ~300-attacker scene with one `c_naive` flag flipped — the
-> optimized path holds server tick-rate with zero netvar churn while the deliberately-naive strawman
-> melts under identical load.
+**Naive vs optimized** — the same ~300-attacker scene, one `c_naive` flag, toggling the deliberately-naive strawman off:
+
+https://github.com/user-attachments/assets/f645b4ff-59e8-4dfa-a945-a6090048bd3b
+
+*(Inline player on GitHub. Headline flips: netvar churn **1,500 → 0/s**, and off-screen `updating_ents` **326 → 29** — full breakdown in [the netcode doc](docs/netcode-decisions.md).)*
 
 ## The mode
 
