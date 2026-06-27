@@ -136,6 +136,7 @@ local function fn()
     inst.entity:AddAnimState()
     inst.entity:AddSoundEmitter()
     inst.entity:AddMiniMapEntity()
+    inst.entity:AddLight()
     inst.entity:AddNetwork()
 
     -- Honest obstacle radius: attacker melee reach auto-scales off it
@@ -154,6 +155,15 @@ local function fn()
     inst.AnimState:PlayAnimation("full")
     inst.AnimState:SetMultColour(1, .82, .5, 1) -- amber recolor of the moonbase art
     inst.AnimState:SetFinalOffset(1)
+
+    -- The Engine glows: a warm lit defensive zone so night isn't an uncontrolled
+    -- difficulty spike (you can see to command + minions aren't fighting blind).
+    -- Configured identically on both sides (pre-pristine) — deterministic, no netvar.
+    inst.Light:SetRadius(TUNING.GAUNTLET_OBJECTIVE_LIGHT_RADIUS)
+    inst.Light:SetIntensity(.65)
+    inst.Light:SetFalloff(.7)
+    inst.Light:SetColour(255 / 255, 215 / 255, 150 / 255)
+    inst.Light:Enable(true)
 
     -- Replicated siege state. Declared on both sides, before SetPristine:
     -- wave counter quantized to a smallbyte, phase enum to a tinybyte, objective

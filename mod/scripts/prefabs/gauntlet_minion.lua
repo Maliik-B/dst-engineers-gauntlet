@@ -359,6 +359,12 @@ local function fn()
     -- deploy spot. Then re-bind to that owner whenever they (re)join the world,
     -- distance-independent, so the minion stays yours across disconnects/respawns.
     inst:ListenForEvent("onbuilt", function(minion, data)
+        -- Deploy feedback: the minion is a clockwork construct, so a metallic robotic
+        -- turn-on reads better than a stone-place thud — the Wagdrone's beep+whir
+        -- "powering on" (rifts5), so the unit sounds like it's coming online.
+        if minion.SoundEmitter ~= nil then
+            minion.SoundEmitter:PlaySound("rifts5/wagdrone_rolling/beep_turnon")
+        end
         if data ~= nil and data.builder ~= nil then
             SetMinionOwner(minion, data.builder)
         end

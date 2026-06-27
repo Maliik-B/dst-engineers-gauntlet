@@ -31,6 +31,7 @@ local _worldsettingstimer = TheWorld.components.worldsettingstimer
 local _objective = nil
 local _phase = PHASE.IDLE
 local _wavenum = 0
+local _breakersthiswave = 0 -- bounded by GAUNTLET_BREAKER_CAP; reset each wave start
 local _spawnsleft = 0
 local _timetonextspawn = 0
 local _activeattackers = {}
@@ -82,7 +83,24 @@ local function SetWave(wave)
     end
 end
 
+-- Clamped per-wave table lookup: the row for `wave` clamped to [1, #t], or nil if the
+-- table is missing/empty. Shared by every per-wave tuning table (counts, cadence,
+-- warning, breaker floor/cap) so the clamp logic lives in exactly one place.
+local function ClampedRow(t, wave)
+    if t ~= nil and #t > 0 then
+        return t[math.max(1, math.min(wave, #t))]
+    end
+    return nil
+end
+
 local function CalcWaveSize(wave)
+    -- The explicit per-wave counts are the tuned shape at the DEFAULT wave_size; the
+    -- wave_size config scales them (a difficulty/load multiplier — "Stress 80" drives
+    -- the perf A/Bs). The WAVE_SIZE*growth formula is the fallback beyond the table.
+    local base = ClampedRow(TUNING.GAUNTLET_WAVE_COUNTS, wave)
+    if base ~= nil then
+        return math.max(1, math.floor(base * TUNING.GAUNTLET_WAVE_SIZE / TUNING.GAUNTLET_WAVE_SIZE_BASE + .5))
+    end
     return math.max(1, math.floor(TUNING.GAUNTLET_WAVE_SIZE * (1 + TUNING.GAUNTLET_WAVE_GROWTH * (wave - 1)) + .5))
 end
 
@@ -143,13 +161,25 @@ local function NoHoles(pt)
     return not TheWorld.Map:IsPointNearHole(pt)
 end
 
--- Fan of candidate angles on a ring around the objective, walkable and
--- no-hole checked (hounded's GetSpawnPoint geometry, inverted onto the
--- objective instead of a target player).
+-- Fan of candidate angles on a ring around the objective, walkable and no-hole
+-- checked (hounded's GetSpawnPoint geometry, inverted onto the objective instead
+-- of a target player). Tries progressively CLOSER rings so a cramped placement
+-- (water/holes eating the outer ring) still finds ground instead of stalling the
+-- whole siege with zero spawns. Last resort: the objective's own tile (it was
+-- placeable, so it's walkable) — this never returns nil while an objective exists,
+-- so the drip can't dead-loop on a bad placement.
+-- Progressively closer rings (multipliers of SPAWN_DIST) tried in order; hoisted so
+-- the drip hot path doesn't rebuild the list on every spawn.
+local SPAWN_RING_RATIOS = { 1, .66, .4, .25 }
 local function GetSpawnPoint(pt)
-    local offset = FindWalkableOffset(pt, math.random() * TWOPI, TUNING.GAUNTLET_SPAWN_DIST, 12, true, true, NoHoles)
-        or FindWalkableOffset(pt, math.random() * TWOPI, TUNING.GAUNTLET_SPAWN_DIST * .5, 8, true, true, NoHoles)
-    return offset ~= nil and pt + offset or nil
+    local dist = TUNING.GAUNTLET_SPAWN_DIST
+    for _, ratio in ipairs(SPAWN_RING_RATIOS) do
+        local offset = FindWalkableOffset(pt, math.random() * TWOPI, dist * ratio, 12, true, true, NoHoles)
+        if offset ~= nil then
+            return pt + offset
+        end
+    end
+    return pt -- boxed in by water/holes: spawn at the objective rather than not at all
 end
 
 -- Optimized server->client wave announcement: ONE batched RPC carrying the
@@ -172,15 +202,24 @@ local WAVE_ROSTER =
 {
     { prefab = "gauntlet_attacker", weight = 1.0, minwave = 1 }, -- Besieger (baseline)
     { prefab = "gauntlet_swarmer",  weight = 0.7, minwave = 2 }, -- fast chaff
-    { prefab = "gauntlet_breaker",  weight = 0.4, minwave = 3 }, -- defense-smasher
+    -- Breaker weight RAMPS per wave (the Varglet-analog concentration spike grows late).
+    { prefab = "gauntlet_breaker",  weight = 0.4, minwave = 3, rampkey = "GAUNTLET_BREAKER_WEIGHT_RAMP" },
 }
+
+-- Effective roster weight at a wave: base + ramp*(waves past minwave). Ramp reads live
+-- from TUNING (rampkey) so breaker prevalence stays tunable mid-playtest.
+local function EffWeight(e, wave)
+    local ramp = e.rampkey and (TUNING[e.rampkey] or 0) or 0
+    return e.weight + ramp * math.max(0, wave - e.minwave)
+end
 
 local function PickAttackerPrefab(wave)
     local total, eligible = 0, {}
     for _, e in ipairs(WAVE_ROSTER) do
         if wave >= e.minwave then
-            total = total + e.weight
-            eligible[#eligible + 1] = e
+            local w = EffWeight(e, wave)
+            total = total + w
+            eligible[#eligible + 1] = { prefab = e.prefab, w = w }
         end
     end
     if total <= 0 then
@@ -188,12 +227,37 @@ local function PickAttackerPrefab(wave)
     end
     local roll = math.random() * total
     for _, e in ipairs(eligible) do
-        roll = roll - e.weight
+        roll = roll - e.w
         if roll <= 0 then
             return e.prefab
         end
     end
     return "gauntlet_attacker"
+end
+
+-- Per-wave spawn cadence (rolling -> burst). Returns base, var for delay = base+rand*var,
+-- from GAUNTLET_SPAWN_CADENCE clamped to its last row; falls back to the flat pair.
+local function WaveCadence(wave)
+    local row = ClampedRow(TUNING.GAUNTLET_SPAWN_CADENCE, wave)
+    if row ~= nil then
+        return row[1], row[2]
+    end
+    return TUNING.GAUNTLET_SPAWN_INTERVAL_BASE, TUNING.GAUNTLET_SPAWN_INTERVAL_VAR
+end
+
+-- Per-wave warning window (shrinks late); falls back to the flat WARN_DURATION.
+local function WaveWarnDuration(wave)
+    return ClampedRow(TUNING.GAUNTLET_WARN_BY_WAVE, wave) or TUNING.GAUNTLET_WARN_DURATION
+end
+
+-- Per-wave hard cap on Breakers (the variance ceiling); no cap table -> 0.
+local function BreakerCap(wave)
+    return ClampedRow(TUNING.GAUNTLET_BREAKER_CAP, wave) or 0
+end
+
+-- Per-wave guaranteed minimum Breakers (the variance floor); none -> 0.
+local function BreakerFloor(wave)
+    return ClampedRow(TUNING.GAUNTLET_BREAKER_FLOOR, wave) or 0
 end
 
 -- Spawn one attacker (prefab `prefab`, default the Besieger) at pt, hand off the
@@ -243,8 +307,23 @@ local function SpawnAttacker()
         return false
     end
     -- Wave attackers are a roster mix that ramps by wave; c_stress stays pure
-    -- Besieger for a clean uniform load A/B (see Stress).
-    SpawnOneAt(pt, PickAttackerPrefab(_wavenum))
+    -- Besieger for a clean uniform load A/B (see Stress). The Breaker count is bounded
+    -- to [floor, cap]: force Breakers if the rolls fall short of the floor and we're
+    -- about to run out of spawns (GetSpawnPoint never fails now, so _spawnsleft maps
+    -- 1:1 to remaining spawns and the count is exact); the cap stops an over-spike.
+    local prefab = PickAttackerPrefab(_wavenum)
+    local floor = math.min(BreakerFloor(_wavenum), BreakerCap(_wavenum)) -- floor can't exceed cap
+    if _breakersthiswave < floor and _spawnsleft <= floor - _breakersthiswave then
+        prefab = "gauntlet_breaker"
+    end
+    if prefab == "gauntlet_breaker" then
+        if _breakersthiswave >= BreakerCap(_wavenum) then
+            prefab = "gauntlet_attacker"
+        else
+            _breakersthiswave = _breakersthiswave + 1
+        end
+    end
+    SpawnOneAt(pt, prefab)
     return true
 end
 
@@ -268,6 +347,7 @@ local function StartWave()
     end
     SetWave(_wavenum + 1)
     _spawnsleft = CalcWaveSize(_wavenum)
+    _breakersthiswave = 0 -- reset the per-wave Breaker cap counter
     _timetonextspawn = 0
     _warning = false
     SetPhase(PHASE.ACTIVE)
@@ -298,11 +378,20 @@ local function ScheduleResultsWindow()
     end)
 end
 
+-- Engine HP as an integer percent — shown in chat + logged so the toll per wave
+-- (and the final margin) is captured for tuning. 0 if the objective is gone.
+local function EngineHPPct()
+    return (_objective ~= nil and _objective:IsValid() and _objective.components.health ~= nil)
+        and math.floor(_objective.components.health:GetPercent() * 100 + .5) or 0
+end
+
 local function Victory()
     SetPhase(PHASE.VICTORY)
     SetUpdating(false)
     ScheduleResultsWindow()
-    TheNet:Announce(string.format("Victory! The Engine survived all %d waves.", _wavenum))
+    local hp = EngineHPPct()
+    print(string.format("[Gauntlet] VICTORY — Engine at %d%%", hp))
+    TheNet:Announce(string.format("Victory! The Engine survived all %d waves at %d%%.", _wavenum, hp))
 end
 
 local function Defeat()
@@ -321,6 +410,12 @@ local function OnWaveCleared()
     if _wavenum >= TUNING.GAUNTLET_NUM_WAVES then
         Victory()
     else
+        -- Fires when the wave's last attacker dies (the user-requested "wave done"
+        -- cue). Victory() covers the final wave, so this is non-final only. The HP
+        -- read shows the wave's toll — player-facing in chat + logged for tuning.
+        local hp = EngineHPPct()
+        print(string.format("[Gauntlet] Wave %d cleared — Engine at %d%%", _wavenum, hp))
+        TheNet:Announce(string.format("Wave %d repelled! Engine at %d%%.", _wavenum, hp))
         ScheduleWave(TUNING.GAUNTLET_WAVE_DELAY)
     end
 end
@@ -507,7 +602,7 @@ function self:OnUpdate(dt)
             -- Timer fired this frame; StartWave runs from the scheduler.
             return
         end
-        if not _warning and timeleft <= TUNING.GAUNTLET_WARN_DURATION then
+        if not _warning and timeleft <= WaveWarnDuration(_wavenum + 1) then
             _warning = true
             _timetonextwarnsound = 0
             TheNet:Announce(string.format("Wave %d approaches the Engine...", _wavenum + 1))
@@ -533,8 +628,9 @@ function self:OnUpdate(dt)
             if _timetonextspawn <= 0 then
                 if SpawnAttacker() then
                     _spawnsleft = _spawnsleft - 1
-                    _timetonextspawn = TUNING.GAUNTLET_SPAWN_INTERVAL_BASE
-                        + math.random() * TUNING.GAUNTLET_SPAWN_INTERVAL_VAR
+                    -- Per-wave cadence: rolling early, burst late (the current wave).
+                    local base, var = WaveCadence(_wavenum)
+                    _timetonextspawn = base + math.random() * var
                 else
                     _timetonextspawn = 1 -- no walkable spawn point this attempt; retry shortly
                 end

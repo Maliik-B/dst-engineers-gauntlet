@@ -27,13 +27,13 @@ configuration_options = {
         label = "Wave Size",
         hover = "Base attackers per wave. This is the load dial.",
         options = {
-            { description = "Small (5)",   data = 5 },
-            { description = "Default (10)", data = 10 },
-            { description = "Large (20)",  data = 20 },
-            { description = "Huge (40)",   data = 40 },
+            { description = "Small (4)",   data = 4 },
+            { description = "Default (6)", data = 6 },
+            { description = "Large (10)",  data = 10 },
+            { description = "Huge (20)",   data = 20 },
             { description = "Stress (80)", data = 80 },
         },
-        default = 10,
+        default = 6,
     },
     {
         name = "num_waves",
