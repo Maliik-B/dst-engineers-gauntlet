@@ -144,7 +144,7 @@ scan — a period with a random phase, the cadence `Combat:SetRetargetFunction` 
 task (`mod/scripts/components/gauntletload.lua:140-167`, period
 `TUNING.GAUNTLET_LOAD_SCAN_PERIOD` at `mod/modmain.lua:96`).
 
-> **Measured:** off-screen `updating_ents` **345 → 52**; awake scan-ops **0.8–1.35 M/s → 139 K/s**.
+> **Measured:** off-screen `updating_ents` **326 → 29**; awake scan-ops **450 K/s → 66 K/s**.
 
 ### 3b. Replicate only what clients need — quantized and diffed
 
@@ -163,7 +163,7 @@ the bucket actually changes** (`mod/scripts/prefabs/gauntlet_objective.lua:40-49
 (`scripts/netvars.lua:47`), so chipping a 1000-HP engine to death produces at most ~200 replication
 events over its entire life rather than one per damage tick.
 
-> **Measured:** netvar churn **2,672/s → 0/s**.
+> **Measured:** netvar churn **1,500/s → 0/s**.
 
 ### 3c. One batched event, not a per-spawn flood
 
@@ -192,12 +192,12 @@ first:
 
 | axis | optimized (`c_naive` off) | naive (`c_naive` on) | scene |
 |---|---|---|---|
-| `updating_ents` | **52** | ~345 | off-screen / asleep |
-| load compute | **5.9 ms/tick** | 65 ms/tick | on-screen, awake |
-| scan-ops | **139 K/s** | 0.8–1.35 M/s | on-screen, awake |
-| netvar churn | **0/s** | 2,672/s | on-screen, moving |
+| `updating_ents` | **29** | 326 | off-screen / asleep |
+| load compute | **11 ms/tick** | 109 ms/tick | on-screen, awake |
+| scan-ops | **66 K/s** | 450 K/s | on-screen, awake |
+| netvar churn | **0/s** | 1,500/s | on-screen, moving |
 | spawn RPCs (per 300) | **2** | 300 | at spawn |
-| server frame *(obs)* | ~89 ms (11 fps) | ~169 ms (6 fps) | on-screen, awake |
+| server frame *(obs)* | ~107 ms (9 fps) | ~185 ms (5 fps) | on-screen, awake |
 
 **Measurement integrity.** An earlier version derived "MSPT" from the wall-clock interval *between*
 ticks, which the dedicated server's variable frame pacing confounds (idle it throttles to ~30 fps;
@@ -213,7 +213,7 @@ no clock at all. The `frame` figure is retained but explicitly observational: it
 "is the server below 30 fps," not "how much compute."
 
 **Honest scope of the win.** The `compute` metric measures *only* the load component, so the naive
-strawman's own cost is the headline 65 ms/tick. The whole-server *frame* (89 / 169 ms) is dominated
+strawman's own cost is the headline 109 ms/tick. The whole-server *frame* (107 / 185 ms) is dominated
 by something the flag doesn't touch: ~300 **awake** DST mob brains and stategraphs cost ~80–100
 ms/tick on one screen regardless. The naive load roughly doubles that on top, but neither path holds
 30 fps with 300 awake mobs rendered at once — and that is a gameplay-scaling reality, not a netcode
