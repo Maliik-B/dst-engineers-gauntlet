@@ -27,6 +27,7 @@ require("prefabutil")
 local assets =
 {
     Asset("ANIM", "anim/winona_catapult.zip"),
+    Asset("ANIM", "anim/winona_catapult_placement.zip"), -- the range ring drawn on the placer
 }
 
 local prefabs =
@@ -107,6 +108,14 @@ local function OnHealthDelta(inst)
     end
 end
 
+-- Deploy feedback: the shipped catapult plays its "place" sound the moment it's
+-- built (SGwinona_catapult onenter of its place state). We build via a placer
+-- recipe, so the engine fires an "onbuilt" event on the finished structure — we
+-- hang the same catapult place sound off it so the turret doesn't appear silently.
+local function OnBuilt(inst)
+    inst.SoundEmitter:PlaySound("dontstarve/common/together/catapult/place")
+end
+
 -- Hammer = the intentional dismantle + refund (lootdropper drops the recipe
 -- ingredients by default). Combat-death drops nothing (handled in the SG).
 local function OnHammered(inst)
@@ -137,6 +146,8 @@ local function fn()
     inst.entity:AddAnimState()
     inst.entity:AddSoundEmitter()
     inst.entity:AddNetwork()
+    inst.entity:AddMiniMapEntity()
+    inst.MiniMapEntity:SetIcon("winona_catapult.png") -- map parity: reuse the shipped catapult icon (matches the art on screen)
 
     MakeObstaclePhysics(inst, .5)
     inst.Physics:SetDontRemoveOnSleep(true)
@@ -190,6 +201,7 @@ local function fn()
 
     inst:ListenForEvent("healthdelta", OnHealthDelta)
     inst:ListenForEvent("attacked", OnAttacked)
+    inst:ListenForEvent("onbuilt", OnBuilt) -- play the place sound when a player builds one
 
     inst:SetStateGraph("SGgauntlet_turret")
     inst:SetBrain(brain)
@@ -197,8 +209,40 @@ local function fn()
     return inst
 end
 
+-- Range affordance (Klei parity — the Winona-catapult placer ring): a ground
+-- circle showing the turret's attack radius while you place it. Reuses the
+-- catapult's "idle_15" ring art (10u radius at scale 1, 15u at the catapult's
+-- 1.5), rescaled to our range so it adapts if the range is retuned.
+local function CreateRangeRing()
+    local inst = CreateEntity()
+    inst.entity:SetCanSleep(false)
+    inst.persists = false
+
+    inst.entity:AddTransform()
+    inst.entity:AddAnimState()
+
+    inst:AddTag("CLASSIFIED")
+    inst:AddTag("NOCLICK")
+    inst:AddTag("placer")
+
+    inst.AnimState:SetBank("winona_catapult_placement")
+    inst.AnimState:SetBuild("winona_catapult_placement")
+    inst.AnimState:PlayAnimation("idle_15")
+    inst.AnimState:SetAddColour(0, .35, .15, 0) -- soft green "coverage" tint
+    inst.AnimState:SetLightOverride(1)
+    inst.AnimState:SetOrientation(ANIM_ORIENTATION.OnGround)
+    inst.AnimState:SetLayer(LAYER_BACKGROUND)
+    inst.AnimState:SetSortOrder(1)
+
+    local s = TUNING.GAUNTLET_TURRET_RANGE / 10
+    inst.AnimState:SetScale(s, s)
+
+    return inst
+end
+
 local function PlacerPostInit(inst)
     inst.AnimState:SetMultColour(1, .82, .5, 1) -- ghost matches the amber turret
+    CreateRangeRing().entity:SetParent(inst.entity)
 end
 
 -- Placer ghost: match the shipped catapult placer — the "idle_placer" anim with

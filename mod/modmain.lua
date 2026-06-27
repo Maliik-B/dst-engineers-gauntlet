@@ -29,9 +29,17 @@ PrefabFiles =
 -- component/prefab code. wave_size is the load dial from the mod config.
 --------------------------------------------------------------------------
 
-TUNING.GAUNTLET_WAVE_SIZE = GetModConfigData("wave_size") or 10
+TUNING.GAUNTLET_WAVE_SIZE = GetModConfigData("wave_size") or 6 -- fallback == WAVE_SIZE_BASE (scale 1 = tuned counts)
 TUNING.GAUNTLET_NUM_WAVES = GetModConfigData("num_waves") or 5
-TUNING.GAUNTLET_WAVE_GROWTH = .5            -- fraction of base size added per wave
+TUNING.GAUNTLET_WAVE_GROWTH = .5            -- fraction of base size added per wave (formula fallback)
+-- The wave_size the count table is tuned at; CalcWaveSize scales the table by
+-- wave_size/this, so the config dial still works (default 6 == the tuned counts).
+TUNING.GAUNTLET_WAVE_SIZE_BASE = 6
+-- Explicit per-wave attacker counts (the tuned shape; scaled by wave_size). Beefed
+-- early so the opener is a real wave; the counts then climb modestly (10->18), but most
+-- of the late escalation is carried by the tightening cadence + Breakers, not the count
+-- alone. Indexed by wave; clamped; falls back to the growth formula beyond the table.
+TUNING.GAUNTLET_WAVE_COUNTS = { 10, 11, 13, 15, 18 }
 
 TUNING.GAUNTLET_FIRST_WAVE_DELAY = 30       -- seconds from c_gauntlet_start() to wave 1
 TUNING.GAUNTLET_WAVE_DELAY = GetModConfigData("wave_interval") or 60 -- inter-wave clock (worldsettingstimer maxtime)
@@ -39,8 +47,19 @@ TUNING.GAUNTLET_WARN_DURATION = 15          -- growl-warning window before each 
 TUNING.GAUNTLET_RESULT_DISPLAY = 15         -- seconds a VICTORY/DEFEAT shows before the run returns to IDLE
 
 TUNING.GAUNTLET_SPAWN_DIST = 30             -- spawn ring radius around the objective
-TUNING.GAUNTLET_SPAWN_INTERVAL_BASE = 1     -- drip-release: one spawn per interval...
-TUNING.GAUNTLET_SPAWN_INTERVAL_VAR = 1      -- ...plus up to this much jitter
+TUNING.GAUNTLET_SPAWN_INTERVAL_BASE = 1     -- drip-release fallback: one spawn per interval...
+TUNING.GAUNTLET_SPAWN_INTERVAL_VAR = 1      -- ...plus up to this much jitter (per-wave table below overrides)
+
+-- Per-wave spawn cadence — the "rolling -> burst" lever. Anchored to DST's own
+-- per-spawn hound delay bands (3-8s early ... 0.5-1.5s late): early waves trickle
+-- in (a long rolling grind, low concurrency), late waves arrive in a sharp burst
+-- (high concurrency piling on the Engine). {base, var} -> delay = base + rand*var.
+-- Indexed by wave; clamped to the last row beyond the table. Pacing carries much of
+-- the late escalation, alongside the modestly-climbing counts.
+TUNING.GAUNTLET_SPAWN_CADENCE = { {2, 3}, {1.5, 2.5}, {1.5, 2.5}, {0.5, 3}, {0.5, 1} }
+-- Per-wave warning window (shrinks as waves harden, like DST's 120->30s). Short
+-- late warning + the burst cadence = the sharp climax. Indexed by wave; clamped.
+TUNING.GAUNTLET_WARN_BY_WAVE = { 20, 16, 13, 10, 8 }
 
 TUNING.GAUNTLET_OBJECTIVE_HEALTH = 1000
 TUNING.GAUNTLET_OBJECTIVE_WORK = 4          -- hammer hits to dismantle the engine (stand-down)
@@ -51,6 +70,11 @@ TUNING.GAUNTLET_OBJECTIVE_WORK = 4          -- hammer hits to dismantle the engi
 -- normal lose condition; the hammer (workable) is the clean *neutral*
 -- dismantle. Mob damage is untouched (DoDelta only absorbs player afflicters).
 TUNING.GAUNTLET_OBJECTIVE_PLAYER_ABSORB = 0.5
+-- The Engine glows: a lit defensive zone so night isn't an uncontrolled difficulty
+-- spike landing on one wave. Covers the fight area (attackers siege ~3u, defenses
+-- spread ~6u) so you can see to command + minions aren't fighting blind. Keeps night
+-- atmosphere, removes the scramble-for-light confound.
+TUNING.GAUNTLET_OBJECTIVE_LIGHT_RADIUS = 6
 
 -- Attacker: a retuned hound (baselines: TUNING.HOUND_* / MOONHOUND_*).
 TUNING.GAUNTLET_ATTACKER_HEALTH = 150
@@ -90,11 +114,24 @@ TUNING.GAUNTLET_MAX_ATTACKERS = 500
 --------------------------------------------------------------------------
 
 -- Breaker: tanky, slow, big hits; hunts the defense layer (the survive-swarm demo).
+-- Damage buffed 40->60 (balance pass): at 40 a lone minion/turret out-traded it, so
+-- it never earned "defense-smasher"; at 60 it beats a lone minion and a Breaker pack
+-- melts a clustered turret stack — the pressure that makes spreading turrets matter.
 TUNING.GAUNTLET_BREAKER_HEALTH = 400
-TUNING.GAUNTLET_BREAKER_DAMAGE = 40
+TUNING.GAUNTLET_BREAKER_DAMAGE = 60
 TUNING.GAUNTLET_BREAKER_ATTACK_PERIOD = 3
 TUNING.GAUNTLET_BREAKER_ATTACK_RANGE = 3
 TUNING.GAUNTLET_BREAKER_SPEED = 5
+-- The Breaker IS our Varglet (DST merges 5 hounds into one after day 25). Its roster
+-- weight RAMPS per wave past its minwave, so the "concentration spike" grows late —
+-- more focus-target heavies as the siege climaxes. effweight = weight + ramp*(wave-minwave).
+TUNING.GAUNTLET_BREAKER_WEIGHT_RAMP = 0.2
+-- Per-wave Breaker band — the "tasteful variance" done right: a guaranteed FLOOR
+-- (no 0-Breaker fluke makes a wave trivial) and a hard CAP (no RNG over-spike). The
+-- actual count lands anywhere in [floor, cap], so each wave reliably bites while
+-- still varying run to run. Both indexed by wave; clamped. (Floor <= cap by design.)
+TUNING.GAUNTLET_BREAKER_FLOOR = { 0, 0, 1, 2, 3 }
+TUNING.GAUNTLET_BREAKER_CAP   = { 0, 0, 2, 3, 5 }
 
 -- Swarmer: fast, fragile chaff; chases the defending player like the Besieger.
 TUNING.GAUNTLET_SWARMER_HEALTH = 60
@@ -121,6 +158,11 @@ TUNING.GAUNTLET_TURRET_WORK = 4             -- hammer hits to dismantle (refunds
 -- The balance lever (stands in for the catapult battery): total turrets the
 -- arena allows. Raise/lower to tune firepower; one-line change.
 TUNING.GAUNTLET_TURRET_MAX = 4
+-- Turret-to-turret placement spacing. The recipe's generic min_spacing (2) only
+-- stops literal overlap; this larger gate (= the AOE diameter, 2x the radius) stops
+-- STACKING for overlapping AOE, so 4 turrets must cover a footprint instead of a
+-- death-ball — the reason to place them uniquely. (Read at placement; a knob.)
+TUNING.GAUNTLET_TURRET_SPACING = 6
 
 --------------------------------------------------------------------------
 -- Commandable minion (M4) — a recolored clockwork knight, owned per-player and
@@ -202,11 +244,20 @@ local TURRET_CAP_SCAN_RADIUS = 64 -- arena-scoped count for the build-cap
 
 local function TurretCapTestFn(pt, rot)
     -- Placement gate (client ghost AND server build validation, like the shipped
-    -- IsMarshLand testfns): refuse once the arena holds GAUNTLET_TURRET_MAX
-    -- turrets. Counts the networked "gauntlet_turret" tag, visible on both sides.
-    -- Returns (can_build, mouse_blocked).
-    local ents = _G.TheSim:FindEntities(pt.x, 0, pt.z, TURRET_CAP_SCAN_RADIUS, { "gauntlet_turret" })
-    return #ents < TUNING.GAUNTLET_TURRET_MAX, false
+    -- IsMarshLand testfns): counts the networked "gauntlet_turret" tag, visible on
+    -- both sides. Returns (can_build, mouse_blocked).
+    -- (1) build-cap: refuse once the arena holds GAUNTLET_TURRET_MAX turrets.
+    local capents = _G.TheSim:FindEntities(pt.x, 0, pt.z, TURRET_CAP_SCAN_RADIUS, { "gauntlet_turret" })
+    if #capents >= TUNING.GAUNTLET_TURRET_MAX then
+        return false, false
+    end
+    -- (2) anti-stacking: refuse within SPACING of another turret, so 4 turrets must
+    -- spread to a footprint rather than death-ball one tile for overlapping AOE.
+    local nearents = _G.TheSim:FindEntities(pt.x, 0, pt.z, TUNING.GAUNTLET_TURRET_SPACING, { "gauntlet_turret" })
+    if #nearents > 0 then
+        return false, false
+    end
+    return true, false
 end
 
 AddRecipe2(
@@ -328,8 +379,17 @@ AddModRPCHandler("EngineersGauntlet", "GauntletMinionCommand", function(player, 
         return
     end
     -- 5. apply to the SENDER's own minions only (ownership)
+    local applied = 0
     for _, minion in ipairs(player.components.leader:GetFollowersByTag("gauntlet_minion")) do
-        minion:SetMinionCommand(command, x, z)
+        if minion:SetMinionCommand(command, x, z) then
+            applied = applied + 1
+        end
+    end
+    -- Cast feedback: an engineer-UI confirm so the order reads as registered. Only
+    -- when something actually took (e.g. FOCUS with no enemy near stays silent),
+    -- so the sound itself signals success vs no-op.
+    if applied > 0 and player.SoundEmitter ~= nil then
+        player.SoundEmitter:PlaySound("meta4/winona_UI/select")
     end
 end)
 
@@ -350,6 +410,77 @@ local function GetMinionCommandForCursor(player)
     return MINION_COMMAND.DEFEND
 end
 
+-- Targeting preview (client-only, Klei parity): while the commander is equipped a
+-- ground reticule follows the cursor and recolours to the verb the right-click
+-- WOULD send — reusing GetMinionCommandForCursor, so the preview can never disagree
+-- with what actually fires. Green = defend at the point, red = focus snapped onto
+-- the hovered enemy, amber = follow on you. Reuses the shipped reticuleaoe art (the
+-- same family Klei builds the catapult's own reticules from). No server/RPC change.
+local RETICULE_COLOUR =
+{
+    [MINION_COMMAND.DEFEND] = { 0, 1, .25 },  -- green: the order lands here
+    [MINION_COMMAND.FOCUS]  = { 1, .25, 0 },  -- red: hunt this enemy (the shipped hostile-target tone)
+    [MINION_COMMAND.FOLLOW] = { 1, .82, .3 }, -- amber: keep pace with me (the commander tone)
+}
+
+-- Where the order visually anchors: the hovered enemy for FOCUS, you for FOLLOW,
+-- else the cursor ground point. (The RPC still sends the cursor point regardless;
+-- the server resolves FOCUS to the nearest attacker there, which is the hovered
+-- enemy — so anchor and effect agree.)
+local function GetCommandAnchor(player, command)
+    if command == MINION_COMMAND.FOCUS then
+        local target = _G.TheInput:GetWorldEntityUnderMouse()
+        if target ~= nil and target:IsValid() then
+            local x, _, z = target.Transform:GetWorldPosition()
+            return x, z
+        end
+    elseif command == MINION_COMMAND.FOLLOW then
+        local x, _, z = player.Transform:GetWorldPosition()
+        return x, z
+    end
+    local pos = _G.TheInput:GetWorldPosition()
+    if pos ~= nil then
+        return pos.x, pos.z
+    end
+end
+
+-- Per-frame, local player only. Hides the reticule unless the commander is equipped
+-- and the cursor resolves to a valid anchor; otherwise repositions + recolours it.
+local function UpdateCommanderReticule(player)
+    if player ~= _G.ThePlayer then
+        return
+    end
+    local inventory = player.replica.inventory
+    local equipped = inventory ~= nil and inventory:GetEquippedItem(_G.EQUIPSLOTS.HANDS) or nil
+    local reticule = player._gauntlet_reticule
+
+    -- Resolve the verb + anchor only when the commander is equipped. Kept as an
+    -- explicit branch (not an `and/or` chain) so GetCommandAnchor's two return
+    -- values survive — the idiom would collapse them and drop the z coordinate.
+    local command, ax, az
+    if equipped ~= nil and equipped.prefab == "gauntlet_commander" then
+        command = GetMinionCommandForCursor(player)
+        ax, az = GetCommandAnchor(player, command)
+    end
+
+    if ax == nil then
+        if reticule ~= nil and reticule:IsValid() then
+            reticule:Hide()
+        end
+        return
+    end
+
+    if reticule == nil or not reticule:IsValid() then
+        reticule = _G.SpawnPrefab("reticuleaoe")
+        player._gauntlet_reticule = reticule
+    end
+
+    local c = RETICULE_COLOUR[command]
+    reticule.Transform:SetPosition(ax, 0, az)
+    reticule.AnimState:SetMultColour(c[1], c[2], c[3], 1)
+    reticule:Show()
+end
+
 local function OnCommanderRightClick(down)
     if not down then
         return -- digitalvalue is false on release; fire on press only
@@ -367,8 +498,23 @@ local function OnCommanderRightClick(down)
     if pos == nil then
         return
     end
+    local command = GetMinionCommandForCursor(player)
     SendModRPCToServer(GetModRPC("EngineersGauntlet", "GauntletMinionCommand"),
-        GetMinionCommandForCursor(player), pos.x, pos.z)
+        command, pos.x, pos.z)
+
+    -- Cast feedback: a one-shot ping at the order's anchor, tinted to the verb —
+    -- the visual partner to the server's confirm sound. Client-side and optimistic
+    -- (the server still validates); the sound only plays on a real apply, so a
+    -- no-op FOCUS pings without the confirm chime.
+    local ax, az = GetCommandAnchor(player, command)
+    if ax ~= nil then
+        local ping = _G.SpawnPrefab("reticuleaoeping")
+        if ping ~= nil then
+            local c = RETICULE_COLOUR[command]
+            ping.Transform:SetPosition(ax, 0, az)
+            ping.AnimState:SetMultColour(c[1], c[2], c[3], 1)
+        end
+    end
 end
 
 -- Register once. Clients (and the host) have TheInput; a dedicated server does
@@ -376,6 +522,28 @@ end
 if _G.TheInput ~= nil then
     _G.TheInput:AddControlHandler(_G.CONTROL_SECONDARY, OnCommanderRightClick)
 end
+
+-- Drive the targeting preview per-frame for the LOCAL player. The controls widget
+-- is built only where a player HUD exists (clients + host), never on the dedicated
+-- server, and controls.owner IS that local player — the same gate the siege HUD
+-- uses. Clean the reticule FX up when the player goes (it has no self-removal).
+AddClassPostConstruct("widgets/controls", function(controls)
+    local player = controls.owner
+    -- Guard against driving the same player twice if the controls widget rebuilds
+    -- (skin/character change) — otherwise a duplicate per-frame task would stack.
+    if player == nil or player._gauntlet_reticule_driver then
+        return
+    end
+    player._gauntlet_reticule_driver = true
+    player:DoPeriodicTask(0, function()
+        UpdateCommanderReticule(player)
+    end)
+    player:ListenForEvent("onremove", function()
+        if player._gauntlet_reticule ~= nil and player._gauntlet_reticule:IsValid() then
+            player._gauntlet_reticule:Remove()
+        end
+    end)
+end)
 
 --------------------------------------------------------------------------
 -- World components. Master-sim only (mirrors how forest.lua attaches its

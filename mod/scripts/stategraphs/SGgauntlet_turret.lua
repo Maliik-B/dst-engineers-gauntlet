@@ -67,7 +67,10 @@ local states =
                     proj.Transform:SetPosition(inst.Transform:GetWorldPosition())
                     proj.components.complexprojectile:Launch(target:GetPosition(), inst, inst)
                 end
-                inst.SoundEmitter:PlaySound("dontstarve/common/together/catapult/fire")
+                -- Re-voiced off the catapult: the shot uses the clockwork bishop's
+                -- energy-bolt "shoot" so the engineer turret has its own signature
+                -- (the mechanical ratchet windup above still reads as it aiming).
+                inst.SoundEmitter:PlaySound("dontstarve/creatures/bishop/shoot")
             end),
         },
         events =
