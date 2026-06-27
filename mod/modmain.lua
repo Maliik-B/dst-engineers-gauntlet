@@ -203,6 +203,7 @@ TUNING.GAUNTLET_COMMAND_MAX_DIST = 40
 
 _G.STRINGS.NAMES.GAUNTLET_OBJECTIVE = "Gauntlet Engine"
 _G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_OBJECTIVE = "If it falls, the gauntlet is lost."
+_G.STRINGS.RECIPE_DESC.GAUNTLET_OBJECTIVE = "Place it, then activate to begin the gauntlet."
 _G.STRINGS.NAMES.GAUNTLET_ATTACKER = "Besieger"
 _G.STRINGS.CHARACTERS.GENERIC.DESCRIBE.GAUNTLET_ATTACKER = "It only has eyes for the Engine."
 _G.STRINGS.NAMES.GAUNTLET_BREAKER = "Breaker"
@@ -308,6 +309,106 @@ AddRecipe2(
     },
     { "STRUCTURES" }
 )
+
+--------------------------------------------------------------------------
+-- The Engine (objective) is craftable, deployed via a placer, then started
+-- in-world by activating it ("Begin the Gauntlet" -- see gauntlet_objective).
+-- Build-capped to ONE at a time (the arena's centre). The console
+-- c_gauntlet_place still works for headless/admin setup.
+--------------------------------------------------------------------------
+
+local ENGINE_CAP_SCAN_RADIUS = 4000 -- effectively arena-wide
+
+local function EngineCapTestFn(pt, rot)
+    -- One Engine at a time: refuse placement if a gauntlet_objective exists.
+    local ents = _G.TheSim:FindEntities(pt.x, 0, pt.z, ENGINE_CAP_SCAN_RADIUS, { "gauntlet_objective" })
+    if #ents >= 1 then
+        return false, false
+    end
+    return true, false
+end
+
+AddRecipe2(
+    "gauntlet_objective",
+    { Ingredient("boards", 4), Ingredient("cutstone", 3), Ingredient("goldnugget", 2) },
+    _G.TECH.SCIENCE_ONE,
+    {
+        placer = "gauntlet_objective_placer",
+        min_spacing = 4,
+        testfn = EngineCapTestFn,
+        image = "moonrocknugget.tex", -- thematic placeholder icon (confirm in-client)
+    },
+    { "STRUCTURES" }
+)
+
+--------------------------------------------------------------------------
+-- Starting loadout ("ready to run"). Every character spawns with the gauntlet
+-- kit -- equipment + the mats to build 1 Engine, 2 Sentries, 2 Sentinels --
+-- through the shipped GAMEMODE_STARTING_ITEMS table (tuning.lua), the same
+-- mechanism a character's own starting items use, so it's given exactly once at
+-- first spawn (the engine handles "don't re-give on reload"). The four Gauntlet
+-- recipes are unlocked on first spawn so the on-screen "learned a new recipe"
+-- card introduces the mechanic.
+--------------------------------------------------------------------------
+
+-- Equipment first, then defense materials (mats are listed per-unit and stack in
+-- the bag). hambat + armor + a hammer to relocate/dismantle + the commander tool.
+local GAUNTLET_KIT = { "hambat", "footballhat", "armorwood", "hammer", "gauntlet_commander", "torch" }
+local function AddKitMaterial(prefab, count)
+    for _ = 1, count do
+        GAUNTLET_KIT[#GAUNTLET_KIT + 1] = prefab
+    end
+end
+-- Engine (boards 4 / cutstone 3 / gold 2) + 2 Sentries (boards 6 / gold 4 /
+-- cutstone 4) + 2 Sentinels (gold 6 / cutstone 4 / twigs 6), rounded up a little
+-- (extra cutstone doubles as Engine-repair material).
+AddKitMaterial("boards", 12)
+AddKitMaterial("cutstone", 14)
+AddKitMaterial("goldnugget", 14)
+AddKitMaterial("twigs", 8)
+
+-- Append the kit to every character's DEFAULT (survival-type) starting items. We
+-- MUTATE the existing per-character lists, so it doesn't matter whether a
+-- character prefab captured the table before or after this runs -- they hold the
+-- same list reference. The Forge/Gorge event tables are intentionally left alone.
+local default_starting = TUNING.GAMEMODE_STARTING_ITEMS and TUNING.GAMEMODE_STARTING_ITEMS.DEFAULT
+if default_starting ~= nil then
+    for _, items in pairs(default_starting) do
+        for _, prefab in ipairs(GAUNTLET_KIT) do
+            items[#items + 1] = prefab
+        end
+    end
+end
+
+-- Unlock the Gauntlet recipes on first spawn WITH the on-screen "new recipe" card
+-- (the teaching moment -- TECH.NONE would just appear silently in the menu).
+-- Guarded by KnowsRecipe so a reload/reconnect (already learned + persisted)
+-- doesn't re-pop the cards; nosanity so it doesn't hand out free sanity. builder
+-- is master-only, so this no-ops on clients.
+local GAUNTLET_RECIPES = { "gauntlet_objective", "gauntlet_turret", "gauntlet_minion", "gauntlet_commander" }
+local function UnlockGauntletRecipes(player)
+    local builder = player.components.builder
+    if builder == nil then
+        return
+    end
+    for _, recipe in ipairs(GAUNTLET_RECIPES) do
+        if not builder:KnowsRecipe(recipe) then
+            builder:UnlockRecipe(recipe, true)
+        end
+    end
+end
+
+AddPlayerPostInit(function(player)
+    -- The "new recipe" card only fires when the unlock lands AFTER the client has
+    -- its baseline builder state and its crafting HUD is built (the HUD inits on
+    -- the client's "playeractivated"). At t=0 the recipe is part of the initial
+    -- replication, so no card shows. "playeractivated" is pushed in client-side
+    -- activation code (player_common.lua:826) and never reaches a dedicated server,
+    -- so we can't hook it server-side -- a short server-side delay is the portable
+    -- way to land the unlock as a post-baseline change. builder is master-only, so
+    -- UnlockGauntletRecipes no-ops on clients and on reloads (KnowsRecipe guard).
+    player:DoTaskInTime(5, UnlockGauntletRecipes)
+end)
 
 --------------------------------------------------------------------------
 -- Mod RPC handlers. Registered unconditionally on every process (server,
@@ -646,6 +747,24 @@ _G.c_gauntlet_stop = function()
     if siegemanager ~= nil then
         siegemanager:StopSiege()
     end
+end
+
+-- Grant the full starting loadout + unlock the recipes to the calling player.
+-- The auto-loadout only fires on a fresh character's first spawn, so this is how
+-- you test the "ready to run" kit on an existing dev character (no regen needed).
+_G.c_gauntlet_kit = function()
+    local player = _G.ConsoleCommandPlayer()
+    if player == nil then
+        print("[Gauntlet] no player — run from a connected client's remote console")
+        return
+    end
+    if player.components.inventory ~= nil then
+        for _, prefab in ipairs(GAUNTLET_KIT) do
+            player.components.inventory:GiveItem(_G.SpawnPrefab(prefab))
+        end
+    end
+    UnlockGauntletRecipes(player)
+    print("[Gauntlet] starting kit granted + Gauntlet recipes unlocked")
 end
 
 --------------------------------------------------------------------------
