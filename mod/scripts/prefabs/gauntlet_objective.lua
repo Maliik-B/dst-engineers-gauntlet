@@ -7,6 +7,8 @@
 -- path TO it, not around it.
 
 local GAUNTLET = require("gauntlet_constants")
+local PHASE = GAUNTLET.PHASE
+require("prefabutil") -- MakePlacer
 
 local assets =
 {
@@ -50,6 +52,11 @@ end
 
 local function OnHealthDelta(inst, data)
     PublishObjectiveHP(inst)
+    -- A broken (0 HP) Engine is repairable back to working order; a living one is
+    -- NOT, so there's no mid-run or between-wave healing (see the repairable setup).
+    if inst.components.repairable ~= nil then
+        inst.components.repairable:SetHealthRepairable(inst.components.health:IsDead())
+    end
     local state = GetDamageState(inst)
     if state == "low" then
         inst.AnimState:PlayAnimation("low")
@@ -78,6 +85,21 @@ local function OnHammered(inst)
     fx.Transform:SetPosition(inst.Transform:GetWorldPosition())
     fx:SetMaterial("rock")
     inst:Remove()
+end
+
+-- A lost run leaves the Engine a broken wreck (health hits 0, but nofadeout keeps
+-- it standing). Rather than forcing a full rebuild, the wreck is repairable back to
+-- working order -- the shipped broken-structure-repair pattern (sculptures fix from
+-- broken via a material, sculptures.lua:90-94). One repair fully restores it, and
+-- it's offered ONLY while broken.
+local function OnEngineRepaired(inst, doer, repair_item)
+    inst.components.health:SetPercent(1) -- revive the wreck to full
+end
+
+-- Defense in depth alongside the healthrepairable tag (managed in OnHealthDelta):
+-- the repair only applies to a fully-broken Engine.
+local function CanRepairEngine(inst, repair_item)
+    return inst.components.health:IsDead()
 end
 
 -- The objective is targetable but never retaliates.
@@ -127,6 +149,48 @@ local function OnHPDirty(inst)
     -- Decode the bucket back to a fraction (the HP bar reads this in M5).
     print(string.format("[Gauntlet] client: objective HP -> %d%%",
         math.floor(inst._objhp:value() / 200 * 100 + .5)))
+end
+
+--------------------------------------------------------------------------
+-- In-world start: craft the Engine, then "Begin the Gauntlet" (activate) to
+-- launch the run -- the shipped activatable pattern (yotr_fightring bell). The
+-- action is offered only when a run can actually start, gated off the
+-- replicated phase + HP so it never shows mid-siege or on a destroyed Engine.
+-- Hammering the Engine stays the stand-down (the existing workable channel).
+--------------------------------------------------------------------------
+
+local STARTABLE_PHASE =
+{
+    [PHASE.IDLE] = true,
+    [PHASE.VICTORY] = true, -- rematch on the same Engine
+    [PHASE.DEFEAT] = true,  -- retry (gated to a still-alive Engine below)
+}
+
+-- Client + server gate for offering the ACTIVATE action. Reads the replicated
+-- phase + HP netvars, so the option shows only when a fresh run can start and
+-- is hidden mid-siege or on a dead Engine (componentactions.lua:142-154 calls
+-- this during action collection, client-side).
+local function CanBeginGauntlet(inst, doer)
+    return STARTABLE_PHASE[inst._phase:value()] == true
+        and inst._objhp:value() > 0
+end
+
+local function GetEngineActivateVerb(inst, doer)
+    return "Begin the Gauntlet"
+end
+
+-- Server: activate -> start the siege. StartSiege is phase-aware (it won't
+-- double-start an active run). Re-arm 'inactive' so the action returns next run.
+local function OnEngineActivated(inst, doer)
+    local siegemanager = TheWorld.components.siegemanager
+    if siegemanager == nil then
+        return false
+    end
+    siegemanager:StartSiege()
+    if inst.components.activatable ~= nil then
+        inst.components.activatable.inactive = true
+    end
+    return true
 end
 
 local function fn()
@@ -179,6 +243,11 @@ local function fn()
 
     inst.entity:SetPristine()
 
+    -- In-world "Begin the Gauntlet" action hooks. Set on BOTH sides: the client
+    -- reads them when collecting the right-click action and resolving its verb.
+    inst.activatable_CanActivate = CanBeginGauntlet
+    inst.GetActivateVerb = GetEngineActivateVerb
+
     if not TheWorld.ismastersim then
         inst:ListenForEvent("gauntlet_wavedirty", OnWaveDirty)
         inst:ListenForEvent("gauntlet_phasedirty", OnPhaseDirty)
@@ -191,7 +260,9 @@ local function fn()
     inst:AddComponent("health")
     inst.components.health:SetMaxHealth(TUNING.GAUNTLET_OBJECTIVE_HEALTH)
     inst.components.health.nofadeout = true -- "death" leaves the broken engine, no erode
-    inst.components.health.canheal = false
+    -- canheal lets the REPAIR land (no regen source exists, so nothing auto-heals);
+    -- the broken wreck is repaired back via the repairable component below.
+    inst.components.health.canheal = true
     -- Halve player weapon damage: the engine stays destroyable by hand like
     -- any DST structure (a hammer-less player can tear it down to end a siege),
     -- just at roughly attacker-tier DPS. The hammer channel below is the clean
@@ -214,6 +285,24 @@ local function fn()
     inst.components.workable:SetWorkLeft(TUNING.GAUNTLET_OBJECTIVE_WORK)
     inst.components.workable:SetOnFinishCallback(OnHammered)
 
+    -- The in-world start trigger. inactive=true keeps the action offered; the
+    -- phase/HP gate (inst.activatable_CanActivate) hides it during a live run.
+    inst:AddComponent("activatable")
+    inst.components.activatable.OnActivate = OnEngineActivated
+    inst.components.activatable.inactive = true
+
+    -- A lost Engine becomes a broken wreck you REPAIR back with cutstone, rather
+    -- than rebuilding from scratch -- you keep your placement and most of the cost.
+    -- Gated to the broken state via the healthrepairable tag (set in OnHealthDelta),
+    -- so it's never a mid-run or between-wave heal; hammer still removes it to relocate.
+    inst:AddComponent("repairable")
+    inst.components.repairable.repairmaterial = MATERIALS.STONE
+    inst.components.repairable.onrepaired = OnEngineRepaired
+    inst.components.repairable.testvalidrepairfn = CanRepairEngine
+    inst.components.repairable.noannounce = true
+    inst.components.repairable:SetWorkRepairable(false)   -- the hammer-dismantle isn't repairable
+    inst.components.repairable:SetHealthRepairable(false) -- becomes true only once broken
+
     inst:ListenForEvent("healthdelta", OnHealthDelta)
     inst:ListenForEvent("death", OnDeath)
 
@@ -232,4 +321,10 @@ local function fn()
     return inst
 end
 
-return Prefab("gauntlet_objective", fn, assets, prefabs)
+local function PlacerPostInit(inst)
+    inst.AnimState:SetMultColour(1, .82, .5, 1) -- amber ghost, matches the Engine art
+end
+
+return Prefab("gauntlet_objective", fn, assets, prefabs),
+    MakePlacer("gauntlet_objective_placer", "moonbase", "moonbase", "full",
+        nil, nil, nil, nil, nil, nil, PlacerPostInit)

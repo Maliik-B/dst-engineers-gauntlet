@@ -5,9 +5,9 @@
 name = "Engineer's Gauntlet"
 description = [[Co-op wave defense. Escalating sieges path to a defended objective — hold the line with buildable auto-turrets and a commandable minion. Any character can defend.
 
-v0.5 — finished + fun: three attacker types (rusher / fast swarm / defense-breaker), an on-screen siege HUD, examine-readable condition + commands, damage-tier wear on your defenses, and configurable wave count / size / interval.]]
+v0.6 — playable end-to-end: spawn with a starter kit, then craft and activate the Engine to begin a run (and repair it if it falls). Three attacker types (rusher / fast swarm / defense-breaker), an on-screen siege HUD, examine-readable condition + commands, damage-tier wear, and configurable wave count / size / interval.]]
 author = "Maliik Bryan"
-version = "0.5.0"
+version = "0.6.0"
 
 api_version = 10
 
