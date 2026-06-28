@@ -17,6 +17,9 @@ Crank the waves from a gentle warm-up to a proper meat grinder.
 author = "TheMolunga"
 version = "0.6.0"
 
+icon_atlas = "modicon.xml"
+icon = "modicon.tex"
+
 api_version = 10
 
 dst_compatible = true
