@@ -24,7 +24,7 @@ want to make a stand, then activate it (**"Begin the Gauntlet"**) to start a run
 spawn around it on an escalating timer and path straight to it. Kiting is part of the game — the attackers
 just leash to the Engine (they chase a defender only a short way, then return, and let go if you drag
 them too far), so you can't walk the whole wave off and cheese it. Past that it's open: normal play
-plus the attacker mix and the climbing intensity make for increasingly hectic, semi-unique fights,
+plus the attacker mix and the climbing intensity make for increasingly hectic, fun, and semi-unique fights,
 within a run and across runs. You
 hold the line with the defense layer (any character — nothing is locked to Winona):
 
