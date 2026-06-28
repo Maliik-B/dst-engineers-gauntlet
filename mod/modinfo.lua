@@ -1,19 +1,19 @@
--- Engineer's Gauntlet — co-op wave defense for Don't Starve Together
+-- Engineer's Gauntlet - co-op wave defense for Don't Starve Together
 -- Portfolio mod: server-authoritative siege waves with a measured
 -- naive-vs-optimized netcode demonstration.
 
 name = "Engineer's Gauntlet"
-description = [[Hold the line. Plant your Engine, then weather escalating waves that march straight for it — they won't be kited into a maze, so it's just you and a thickening swarm.
+description = [[Hold the line. Plant your Engine, then weather escalating waves that march straight for it - they won't be kited into a maze, so it's just you and a thickening swarm.
 
 Build auto-turrets, deploy a minion you can actually order around (hold this spot, follow me, or go kill that one), and when the Engine's down to its last sparks, patch it back together and run it again. Any character can play engineer.
 
 Crank the waves from a gentle warm-up to a proper meat grinder.
 
-• Craft and activate the Engine to start a run
-• Three attackers: rushers, fast swarmers, and defense-breakers
-• Buildable auto-turrets + a commandable minion
-• On-screen siege HUD; examine your gear for its status
-• Configurable wave count, size, and pacing]]
+-Craft and activate the Engine to start a run
+-Three attackers: rushers, fast swarmers, and defense-breakers
+-Buildable auto-turrets + a commandable minion
+-On-screen siege HUD; examine your gear for its status
+-Configurable wave count, size, and pacing]]
 author = "TheMolunga"
 version = "0.6.0"
 
