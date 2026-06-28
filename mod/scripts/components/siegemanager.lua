@@ -98,10 +98,16 @@ local function CalcWaveSize(wave)
     -- wave_size config scales them (a difficulty/load multiplier — "Stress 80" drives
     -- the perf A/Bs). The WAVE_SIZE*growth formula is the fallback beyond the table.
     local base = ClampedRow(TUNING.GAUNTLET_WAVE_COUNTS, wave)
-    if base ~= nil then
-        return math.max(1, math.floor(base * TUNING.GAUNTLET_WAVE_SIZE / TUNING.GAUNTLET_WAVE_SIZE_BASE + .5))
-    end
-    return math.max(1, math.floor(TUNING.GAUNTLET_WAVE_SIZE * (1 + TUNING.GAUNTLET_WAVE_GROWTH * (wave - 1)) + .5))
+    local size = (base ~= nil)
+        and (base * TUNING.GAUNTLET_WAVE_SIZE / TUNING.GAUNTLET_WAVE_SIZE_BASE)
+        or (TUNING.GAUNTLET_WAVE_SIZE * (1 + TUNING.GAUNTLET_WAVE_GROWTH * (wave - 1)))
+    -- Co-op scaling: more players defend the one Engine, so scale the wave up to keep
+    -- a group from being trivially easier than a solo run (hounded scales by players
+    -- too). Read off the live player count, so joins/leaves between waves take effect;
+    -- the concurrent-attacker cap (GAUNTLET_MAX_ATTACKERS) still bounds the absolute count.
+    local players = math.max(1, #AllPlayers)
+    local playerscale = 1 + TUNING.GAUNTLET_WAVE_PLAYER_SCALE * (players - 1)
+    return math.max(1, math.floor(size * playerscale + .5))
 end
 
 --------------------------------------------------------------------------
