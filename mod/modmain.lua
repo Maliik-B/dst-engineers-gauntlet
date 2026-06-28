@@ -35,6 +35,7 @@ TUNING.GAUNTLET_WAVE_GROWTH = .5            -- fraction of base size added per w
 -- The wave_size the count table is tuned at; CalcWaveSize scales the table by
 -- wave_size/this, so the config dial still works (default 6 == the tuned counts).
 TUNING.GAUNTLET_WAVE_SIZE_BASE = 6
+TUNING.GAUNTLET_WAVE_PLAYER_SCALE = .6      -- co-op: extra wave size per extra player (1 + scale*(players-1))
 -- Explicit per-wave attacker counts (the tuned shape; scaled by wave_size). Beefed
 -- early so the opener is a real wave; the counts then climb modestly (10->18), but most
 -- of the late escalation is carried by the tightening cadence + Breakers, not the count
