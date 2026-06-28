@@ -55,7 +55,7 @@ This is built as a work sample, so the interesting parts are under the hood:
 
 **→ Full writeup: [`docs/netcode-decisions.md`](docs/netcode-decisions.md)** — three network
 decisions, each with `file:line` evidence in this repo *and* the shipped DST pattern it follows, plus
-the measured A/B table and its honest caveats.
+the measured A/B table and its caveats.
 
 ## Install & run
 
@@ -155,7 +155,7 @@ Dev loop: edit Lua → `c_reset()` in the console (reloads world + mod code) →
 | — | Klei-quality parity + balance pass (first-party affordances, hound-anchored tuning) | ✅ done |
 | M6 | Writeup + Workshop release | 🚧 in progress |
 
-## Known limitations (honest)
+## Known limitations
 
 - **Single-shard (forest only).** A Master + Caves split is the v2 plan; the netcode is built
   shard-aware for it, but v1 does not span shards.

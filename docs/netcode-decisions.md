@@ -184,7 +184,7 @@ against the "feels native" bar. The cap delivers the safety benefit at a fractio
 
 > **Measured:** spawn RPCs per 300 attackers **300 → 2** (one batched send per `c_stress` call).
 
-### How it was measured — and the honest caveats
+### How it was measured — and the caveats
 
 A master-sim metrics component samples once per tick
 (`mod/scripts/components/gauntletmetrics.lua`). It reports, with the trustworthy integer counters
@@ -212,7 +212,7 @@ calls converges to the true total. The `scan-ops` count is an exact integer cros
 no clock at all. The `frame` figure is retained but explicitly observational: it answers only
 "is the server below 30 fps," not "how much compute."
 
-**Honest scope of the win.** The `compute` metric measures *only* the load component, so the naive
+**Scope of the win.** The `compute` metric measures *only* the load component, so the naive
 strawman's own cost is the headline 109 ms/tick. The whole-server *frame* (107 / 185 ms) is dominated
 by something the flag doesn't touch: ~300 **awake** DST mob brains and stategraphs cost ~80–100
 ms/tick on one screen regardless. The naive load roughly doubles that on top, but neither path holds
