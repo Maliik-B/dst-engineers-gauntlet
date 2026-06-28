@@ -15,7 +15,7 @@ Crank the waves from a gentle warm-up to a proper meat grinder.
 -On-screen siege HUD; examine your gear for its status
 -Configurable wave count, size, and pacing]]
 author = "TheMolunga"
-version = "0.6.0"
+version = "0.6.1"
 
 icon_atlas = "modicon.xml"
 icon = "modicon.tex"
