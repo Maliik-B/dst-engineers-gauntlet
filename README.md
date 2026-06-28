@@ -8,8 +8,8 @@ minion. Its centerpiece is a **measured naive-vs-optimized** comparison you can 
 evidence.
 
 **Status:** v1 feature-complete, balanced, and playable end-to-end (craft the Engine, run a gauntlet,
-repair and retry). M0–M5 plus a Klei-quality parity/balance pass are done; M6 (public release:
-writeup + Workshop upload) is in progress.
+repair and retry) — and **[live on the Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3753820770)**.
+M0–M5, a Klei-quality parity/balance pass, and M6 (writeup + Workshop release) are all done.
 
 **Naive vs optimized** — the same ~300-attacker scene, one `c_naive` flag, toggling the deliberately-naive strawman off:
 
@@ -66,7 +66,7 @@ Requires **Don't Starve Together** (mod API v10; not Don't Starve / RoG). It's a
 mod (`all_clients_require_mod = true`), so the host/server is authoritative and every player in a
 session needs it — DST auto-downloads it for clients joining a server that runs it.
 
-- **Steam Workshop:** _(link added at release)_
+- **Steam Workshop:** [Engineer's Gauntlet](https://steamcommunity.com/sharedfiles/filedetails/?id=3753820770)
 - **From source:** copy (or symlink) this repo's `mod/` folder into your DST `mods/` directory as
   `engineers-gauntlet`, then enable **Engineer's Gauntlet** in the in-game Mods menu.
 
@@ -156,7 +156,7 @@ Dev loop: edit Lua → `c_reset()` in the console (reloads world + mod code) →
 | M4 | Defense layer: buildable auto-turret + commandable minion (command RPC) | ✅ done |
 | M5 | Attacker roster, on-screen siege HUD, examine/feedback polish, config menu | ✅ done |
 | — | Klei-quality parity + balance pass (first-party affordances, hound-anchored tuning) | ✅ done |
-| M6 | Writeup + Workshop release | 🚧 in progress |
+| M6 | Writeup + Workshop release | ✅ done |
 
 ## Known limitations
 
