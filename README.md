@@ -21,8 +21,11 @@ https://github.com/user-attachments/assets/f645b4ff-59e8-4dfa-a945-a6090048bd3b
 
 You spawn with a starter kit, so you can set up right away. Craft and place the **Engine** where you
 want to make a stand, then activate it (**"Begin the Gauntlet"**) to start a run. Waves of attackers
-spawn around it on an escalating timer and path straight to it. The AI is anti-kiting — only a short,
-leashed chase — so you can't pull the wave apart and cheese it; the threat is the *siege* itself. You
+spawn around it on an escalating timer and path straight to it. Kiting is part of the game — the attackers
+just leash to the Engine (they chase a defender only a short way, then return, and let go if you drag
+them too far), so you can't walk the whole wave off and cheese it. Past that it's open: normal play
+plus the attacker mix and the climbing intensity make for increasingly hectic, semi-unique fights,
+within a run and across runs. You
 hold the line with the defense layer (any character — nothing is locked to Winona):
 
 - **Gauntlet Sentry** — a buildable auto-turret. Acquires the nearest threat and lobs an AOE shot,
