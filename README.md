@@ -9,7 +9,7 @@ evidence.
 
 **Status:** v1 feature-complete, balanced, and playable end-to-end (craft the Engine, run a gauntlet,
 repair and retry), and **[live on the Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3753820770)**.
-M0–M5, a Klei-quality parity/balance pass, and M6 (writeup + Workshop release) are all done.
+M0–M5, a parity and balance pass against Klei's own content, and M6 (writeup + Workshop release) are all done.
 
 **Naive vs optimized.** The same ~300-attacker scene, one `c_naive` flag, toggling the deliberately-naive strawman off:
 
@@ -130,7 +130,7 @@ The repo's `mod/` folder is junctioned into the DST mods directory, so edits her
 after a world reload:
 
 ```bat
-mklink /J "C:\Program Files (x86)\Steam\steamapps\common\Don't Starve Together\mods\engineers-gauntlet" "D:\Applications\dst-engineers-gauntlet\mod"
+mklink /J "C:\Program Files (x86)\Steam\steamapps\common\Don't Starve Together\mods\engineers-gauntlet" "C:\path\to\dst-engineers-gauntlet\mod"
 ```
 
 Run the local offline dev server (single shard) with `tools\run-server.bat`, then connect from the
@@ -155,7 +155,7 @@ Dev loop: edit Lua → `c_reset()` in the console (reloads world + mod code) →
 | M3 | Optimization pass: sleep/wake discipline, quantized netvars, batched RPCs | ✅ done |
 | M4 | Defense layer: buildable auto-turret + commandable minion (command RPC) | ✅ done |
 | M5 | Attacker roster, on-screen siege HUD, examine/feedback polish, config menu | ✅ done |
-| - | Klei-quality parity + balance pass (first-party affordances, hound-anchored tuning) | ✅ done |
+| - | Parity + balance pass against Klei's content (first-party affordances, hound-anchored tuning) | ✅ done |
 | M6 | Writeup + Workshop release | ✅ done |
 
 ## Known limitations
