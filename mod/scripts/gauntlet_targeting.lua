@@ -10,7 +10,7 @@
 -- belt-and-braces on top (PVP / shared-leader cases).
 --
 -- Required by gauntlet_turret, gauntlet_turret_projectile and gauntlet_minion
--- (server-side use only — each caller owns a combat component).
+-- (server-side use only; each caller owns a combat component).
 
 local ENEMY_MUST_TAGS = { "_combat" }              -- must be targetable at all
 local ENEMY_ONEOF_TAGS = { "monster", "hostile" }  -- ...and an actual threat (not a neutral beefalo)

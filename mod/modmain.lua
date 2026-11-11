@@ -1,4 +1,4 @@
--- Engineer's Gauntlet — modmain
+-- Engineer's Gauntlet: modmain
 --
 -- Architecture rule (locked): the master sim owns all gameplay truth.
 -- Clients render and send intent (RPCs) only. Netvar-bearing prefabs are
@@ -25,7 +25,7 @@ PrefabFiles =
 }
 
 --------------------------------------------------------------------------
--- Tuning. Every Gauntlet knob lives on TUNING.GAUNTLET_* — no literals in
+-- Tuning. Every Gauntlet knob lives on TUNING.GAUNTLET_*, with no literals in
 -- component/prefab code. wave_size is the load dial from the mod config.
 --------------------------------------------------------------------------
 
@@ -51,7 +51,7 @@ TUNING.GAUNTLET_SPAWN_DIST = 30             -- spawn ring radius around the obje
 TUNING.GAUNTLET_SPAWN_INTERVAL_BASE = 1     -- drip-release fallback: one spawn per interval...
 TUNING.GAUNTLET_SPAWN_INTERVAL_VAR = 1      -- ...plus up to this much jitter (per-wave table below overrides)
 
--- Per-wave spawn cadence — the "rolling -> burst" lever. Anchored to DST's own
+-- Per-wave spawn cadence: the "rolling -> burst" lever. Anchored to DST's own
 -- per-spawn hound delay bands (3-8s early ... 0.5-1.5s late): early waves trickle
 -- in (a long rolling grind, low concurrency), late waves arrive in a sharp burst
 -- (high concurrency piling on the Engine). {base, var} -> delay = base + rand*var.
@@ -110,24 +110,24 @@ TUNING.GAUNTLET_LOAD_SCAN_PERIOD = 0.5      -- optimized: throttle the scan to t
 TUNING.GAUNTLET_MAX_ATTACKERS = 500
 
 --------------------------------------------------------------------------
--- M5 attacker roster — 2 new types. They reuse the GAUNTLET_ATTACKER_* brain
+-- M5 attacker roster: 2 new types. They reuse the GAUNTLET_ATTACKER_* brain
 -- gating (aggro/target/return/keep distances); only per-type stats differ.
 --------------------------------------------------------------------------
 
 -- Breaker: tanky, slow, big hits; hunts the defense layer (the survive-swarm demo).
 -- Damage buffed 40->60 (balance pass): at 40 a lone minion/turret out-traded it, so
 -- it never earned "defense-smasher"; at 60 it beats a lone minion and a Breaker pack
--- melts a clustered turret stack — the pressure that makes spreading turrets matter.
+-- melts a clustered turret stack, the pressure that makes spreading turrets matter.
 TUNING.GAUNTLET_BREAKER_HEALTH = 400
 TUNING.GAUNTLET_BREAKER_DAMAGE = 60
 TUNING.GAUNTLET_BREAKER_ATTACK_PERIOD = 3
 TUNING.GAUNTLET_BREAKER_ATTACK_RANGE = 3
 TUNING.GAUNTLET_BREAKER_SPEED = 5
 -- The Breaker IS our Varglet (DST merges 5 hounds into one after day 25). Its roster
--- weight RAMPS per wave past its minwave, so the "concentration spike" grows late —
+-- weight RAMPS per wave past its minwave, so the "concentration spike" grows late:
 -- more focus-target heavies as the siege climaxes. effweight = weight + ramp*(wave-minwave).
 TUNING.GAUNTLET_BREAKER_WEIGHT_RAMP = 0.2
--- Per-wave Breaker band — the "tasteful variance" done right: a guaranteed FLOOR
+-- Per-wave Breaker band (the "tasteful variance" done right): a guaranteed FLOOR
 -- (no 0-Breaker fluke makes a wave trivial) and a hard CAP (no RNG over-spike). The
 -- actual count lands anywhere in [floor, cap], so each wave reliably bites while
 -- still varying run to run. Both indexed by wave; clamped. (Floor <= cap by design.)
@@ -142,7 +142,7 @@ TUNING.GAUNTLET_SWARMER_ATTACK_RANGE = 2.5
 TUNING.GAUNTLET_SWARMER_SPEED = 14
 
 --------------------------------------------------------------------------
--- Defense layer (M4). Auto-turret — the buildable "mech to manage", built on
+-- Defense layer (M4). Auto-turret: the buildable "mech to manage", built on
 -- the eyeturret/Houndius-Shootius pattern (no power/circuit). The Winona
 -- catapult's battery is dropped (character-locked + an economy lever, out of
 -- v1 scope); its balance role is carried by the build-cap + recipe cost below.
@@ -162,11 +162,11 @@ TUNING.GAUNTLET_TURRET_MAX = 4
 -- Turret-to-turret placement spacing. The recipe's generic min_spacing (2) only
 -- stops literal overlap; this larger gate (= the AOE diameter, 2x the radius) stops
 -- STACKING for overlapping AOE, so 4 turrets must cover a footprint instead of a
--- death-ball — the reason to place them uniquely. (Read at placement; a knob.)
+-- death-ball, the reason to place them uniquely. (Read at placement; a knob.)
 TUNING.GAUNTLET_TURRET_SPACING = 6
 
 --------------------------------------------------------------------------
--- Commandable minion (M4) — a recolored clockwork knight, owned per-player and
+-- Commandable minion (M4): a recolored clockwork knight, owned per-player and
 -- commanded via a 3-verb vocabulary (defend / follow / focus). The 2nd, richer
 -- RPC surface (the command channel) lands in Phase 4c; the AI here is driven by
 -- the per-minion command state.
@@ -275,7 +275,7 @@ AddRecipe2(
     { "STRUCTURES" }
 )
 
--- The command tool — an inventory item (any character), Science Machine tier.
+-- The command tool: an inventory item (any character), Science Machine tier.
 AddRecipe2(
     "gauntlet_commander",
     { Ingredient("goldnugget", 2), Ingredient("cutstone", 1), Ingredient("twigs", 2) },
@@ -286,7 +286,7 @@ AddRecipe2(
 
 -- Deploy the minion via a placer (same pattern as the turret). The per-player
 -- cap is enforced with canbuild (which has the builder), NOT testfn (which only
--- gets the point) — canbuild runs server-side before spawning/charging, so at
+-- gets the point); canbuild runs server-side before spawning/charging, so at
 -- cap nothing is built. The minion binds its owner from the onbuilt event.
 local function MinionCapCanBuild(recipe, builder)
     -- builder.components.leader is nil on clients (server-only component), so the
@@ -413,24 +413,24 @@ end)
 
 --------------------------------------------------------------------------
 -- Mod RPC handlers. Registered unconditionally on every process (server,
--- clients, both shard processes later) in a fixed order — registration order
+-- clients, both shard processes later) in a fixed order: registration order
 -- assigns the network ids, so the tables must line up everywhere.
 --
 -- Two server->client wave RPCs, registered in a FIXED order (registration
 -- order assigns the network id, so the tables must line up on every process):
 --
---   GauntletAttackerSpawned — the NAIVE strawman: the server fires ONE per
+--   GauntletAttackerSpawned: the NAIVE strawman: the server fires ONE per
 --     attacker spawn. The body is intentionally trivial; the cost on display is
 --     the per-spawn send VOLUME, not the work here. It tallies arrivals so the
 --     flood is observable client-side via GAUNTLET_CLIENT_SPAWN_RPCS.
---   GauntletWaveIncoming — the OPTIMIZED counterpart: ONE batched RPC per wave
+--   GauntletWaveIncoming: the OPTIMIZED counterpart: ONE batched RPC per wave
 --     (or per c_stress dump) carrying (wave, count, tier). Replaces the flood;
 --     drives the M5 wave-incoming banner/FX from a single atomic event.
 --------------------------------------------------------------------------
 
 -- Pre-declare the client-side RPC tallies HERE, at modmain's main chunk. DST
 -- runs a strict-global guard (strict.lua:21-24): reading an undeclared global
--- from inside a function — which is exactly what these client RPC handlers do —
+-- from inside a function (which is exactly what these client RPC handlers do)
 -- raises "variable '...' is not declared" and crashes the client the moment the
 -- first RPC arrives. Main-chunk assignment is allowed (same as the c_ console
 -- globals below), so initializing them here declares them; the handlers then
@@ -447,10 +447,10 @@ AddClientModRPCHandler("EngineersGauntlet", "GauntletWaveIncoming", function(wav
 end)
 
 --------------------------------------------------------------------------
--- Minion command RPC (M4) — the 2nd RPC surface, and the only CLIENT->SERVER
+-- Minion command RPC (M4): the 2nd RPC surface, and the only CLIENT->SERVER
 -- one. It lives in its own id space (AddModRPCHandler), separate from the two
 -- server->client handlers above (AddClientModRPCHandler), so registering it does
--- NOT shift their ids. Clients send INTENT only — (command_enum, x, z) scalars;
+-- NOT shift their ids. Clients send INTENT only: (command_enum, x, z) scalars;
 -- the server validates and applies. The held commander's right-click sends it.
 --------------------------------------------------------------------------
 
@@ -474,7 +474,7 @@ AddModRPCHandler("EngineersGauntlet", "GauntletMinionCommand", function(player, 
     if player == nil or player.components.leader == nil then
         return
     end
-    -- 4. range clamp: the commanded point must be near the sender (anti-cheat —
+    -- 4. range clamp: the commanded point must be near the sender (anti-cheat:
     --    a client can't direct minions to arbitrary world coordinates)
     if player:GetDistanceSqToPoint(x, 0, z)
         > TUNING.GAUNTLET_COMMAND_MAX_DIST * TUNING.GAUNTLET_COMMAND_MAX_DIST then
@@ -497,7 +497,7 @@ end)
 
 -- CLIENT command trigger: while the commander is equipped, an in-world right-
 -- click reads the cursor and fires the command RPC. Cursor context picks the
--- verb (enemy -> FOCUS, self -> FOLLOW, ground -> DEFEND) — the 2-states + 1-
+-- verb (enemy -> FOCUS, self -> FOLLOW, ground -> DEFEND), the 2-states + 1-
 -- order model. UI-consumed clicks never reach oncontrol (input.lua:166), and the
 -- server re-validates everything, so this client code only proposes intent.
 local function GetMinionCommandForCursor(player)
@@ -514,7 +514,7 @@ end
 
 -- Targeting preview (client-only, Klei parity): while the commander is equipped a
 -- ground reticule follows the cursor and recolours to the verb the right-click
--- WOULD send — reusing GetMinionCommandForCursor, so the preview can never disagree
+-- WOULD send, reusing GetMinionCommandForCursor, so the preview can never disagree
 -- with what actually fires. Green = defend at the point, red = focus snapped onto
 -- the hovered enemy, amber = follow on you. Reuses the shipped reticuleaoe art (the
 -- same family Klei builds the catapult's own reticules from). No server/RPC change.
@@ -528,7 +528,7 @@ local RETICULE_COLOUR =
 -- Where the order visually anchors: the hovered enemy for FOCUS, you for FOLLOW,
 -- else the cursor ground point. (The RPC still sends the cursor point regardless;
 -- the server resolves FOCUS to the nearest attacker there, which is the hovered
--- enemy — so anchor and effect agree.)
+-- enemy, so anchor and effect agree.)
 local function GetCommandAnchor(player, command)
     if command == MINION_COMMAND.FOCUS then
         local target = _G.TheInput:GetWorldEntityUnderMouse()
@@ -558,7 +558,7 @@ local function UpdateCommanderReticule(player)
 
     -- Resolve the verb + anchor only when the commander is equipped. Kept as an
     -- explicit branch (not an `and/or` chain) so GetCommandAnchor's two return
-    -- values survive — the idiom would collapse them and drop the z coordinate.
+    -- values survive; the idiom would collapse them and drop the z coordinate.
     local command, ax, az
     if equipped ~= nil and equipped.prefab == "gauntlet_commander" then
         command = GetMinionCommandForCursor(player)
@@ -604,7 +604,7 @@ local function OnCommanderRightClick(down)
     SendModRPCToServer(GetModRPC("EngineersGauntlet", "GauntletMinionCommand"),
         command, pos.x, pos.z)
 
-    -- Cast feedback: a one-shot ping at the order's anchor, tinted to the verb —
+    -- Cast feedback: a one-shot ping at the order's anchor, tinted to the verb,
     -- the visual partner to the server's confirm sound. Client-side and optimistic
     -- (the server still validates); the sound only plays on a real apply, so a
     -- no-op FOCUS pings without the confirm chime.
@@ -627,12 +627,12 @@ end
 
 -- Drive the targeting preview per-frame for the LOCAL player. The controls widget
 -- is built only where a player HUD exists (clients + host), never on the dedicated
--- server, and controls.owner IS that local player — the same gate the siege HUD
+-- server, and controls.owner IS that local player, the same gate the siege HUD
 -- uses. Clean the reticule FX up when the player goes (it has no self-removal).
 AddClassPostConstruct("widgets/controls", function(controls)
     local player = controls.owner
     -- Guard against driving the same player twice if the controls widget rebuilds
-    -- (skin/character change) — otherwise a duplicate per-frame task would stack.
+    -- (skin/character change); otherwise a duplicate per-frame task would stack.
     if player == nil or player._gauntlet_reticule_driver then
         return
     end
@@ -663,7 +663,7 @@ end)
 -- Client HUD (M5). A top-center siege-status readout (wave + Engine HP), drawn
 -- from the objective's replicated netvars. AddClassPostConstruct only fires
 -- where the player HUD is actually built (clients + host), so there's nothing to
--- guard for the dedicated server — it never constructs the controls widget.
+-- guard for the dedicated server: it never constructs the controls widget.
 --------------------------------------------------------------------------
 
 local GauntletHUD = require("widgets/gauntlethud")
@@ -674,17 +674,17 @@ end)
 
 --------------------------------------------------------------------------
 -- Player-centric console harness (runs server-side via the remote console).
--- Observation/balancing rides the built-ins — c_godmode, c_freecrafting,
--- c_speedmult, c_spawn — those are not rebuilt here.
---   c_gauntlet_place/start/stop — objective + wave control (M1)
---   c_stress(n)          — slam n attackers on the objective now (M2 load dial)
---   c_naive(true/false)  — flip the naive-vs-optimized code path live (M2)
---   c_metrics()          — announce the perf readout to chat; c_metrics_reset() zeroes it
+-- Observation/balancing rides the built-ins (c_godmode, c_freecrafting,
+-- c_speedmult, c_spawn), which are not rebuilt here.
+--   c_gauntlet_place/start/stop: objective + wave control (M1)
+--   c_stress(n):           slam n attackers on the objective now (M2 load dial)
+--   c_naive(true/false):   flip the naive-vs-optimized code path live (M2)
+--   c_metrics():           announce the perf readout to chat; c_metrics_reset() zeroes it
 --------------------------------------------------------------------------
 
 local function GetSiegeManager()
     if _G.TheWorld == nil or not _G.TheWorld.ismastersim then
-        print("[Gauntlet] master-sim command — use the remote console (Ctrl toggles it)")
+        print("[Gauntlet] master-sim command; use the remote console (Ctrl toggles it)")
         return nil
     end
     return _G.TheWorld.components.siegemanager
@@ -692,10 +692,10 @@ end
 
 -- Surface a line BOTH to the server log (print) and into in-game chat
 -- (TheNet:Announce). A command typed in the remote console runs on the server,
--- so its print() lands only in the server log — invisible to the player driving
+-- so its print() lands only in the server log, invisible to the player driving
 -- it. Announcing mirrors it into chat so the readout is actually readable
 -- client-side during a live A/B. Announce is master-sim authoritative (guarded);
--- on a client this just prints locally. The on-screen metrics HUD is M5 — this
+-- on a client this just prints locally. The on-screen metrics HUD is M5; this
 -- is the dev-harness stopgap.
 local function GauntletReport(msg)
     print(msg)
@@ -731,7 +731,7 @@ _G.c_gauntlet_place = function()
     end
     local objective = siegemanager:PlaceObjective(player:GetPosition())
     if objective ~= nil then
-        print(string.format("[Gauntlet] objective placed at %s — step aside and c_gauntlet_start()",
+        print(string.format("[Gauntlet] objective placed at %s; step aside and c_gauntlet_start()",
             tostring(objective:GetPosition())))
     end
 end
@@ -756,7 +756,7 @@ end
 _G.c_gauntlet_kit = function()
     local player = _G.ConsoleCommandPlayer()
     if player == nil then
-        print("[Gauntlet] no player — run from a connected client's remote console")
+        print("[Gauntlet] no player; run from a connected client's remote console")
         return
     end
     if player.components.inventory ~= nil then
@@ -806,13 +806,13 @@ _G.c_naive = function(enable)
     end
     siegemanager:SetNaive(enable)
     GauntletReport(string.format("[Gauntlet] naive path %s", siegemanager:IsNaive()
-        and "ON — strawman (per-spawn RPC, per-tick non-sleeping update, net_float churn)"
-        or "off — optimized (batched per-wave RPC, sleep-stop + throttled scan, no churn)"))
+        and "ON: strawman (per-spawn RPC, per-tick non-sleeping update, net_float churn)"
+        or "off: optimized (batched per-wave RPC, sleep-stop + throttled scan, no churn)"))
 end
 
 _G.c_metrics = function()
     if _G.TheWorld == nil or not _G.TheWorld.ismastersim then
-        print("[Gauntlet] metrics are master-sim only — use the remote console")
+        print("[Gauntlet] metrics are master-sim only; use the remote console")
         return
     end
     local metrics = _G.TheWorld.components.gauntletmetrics
@@ -823,7 +823,7 @@ end
 
 _G.c_metrics_reset = function()
     if _G.TheWorld == nil or not _G.TheWorld.ismastersim then
-        print("[Gauntlet] metrics are master-sim only — use the remote console")
+        print("[Gauntlet] metrics are master-sim only; use the remote console")
         return
     end
     local metrics = _G.TheWorld.components.gauntletmetrics
@@ -839,16 +839,16 @@ end
 -- Phase 4c. All commands operate on the CALLING player's owned minions, so they
 -- must be run from a connected client's remote console (ConsoleCommandPlayer is
 -- nil with no players).
---   c_minion_spawn()  — deploy a minion at you, owned by you (DEFEND here)
---   c_minion_defend() — your minions hold your current position
---   c_minion_follow() — your minions follow you
---   c_minion_focus()  — your minions focus the nearest attacker to you
+--   c_minion_spawn():   deploy a minion at you, owned by you (DEFEND here)
+--   c_minion_defend():  your minions hold your current position
+--   c_minion_follow():  your minions follow you
+--   c_minion_focus():   your minions focus the nearest attacker to you
 --------------------------------------------------------------------------
 
 local function GetConsoleMinions()
     local player = _G.ConsoleCommandPlayer()
     if player == nil or player.components.leader == nil then
-        print("[Gauntlet] minion commands need a connected player — run from the client remote console")
+        print("[Gauntlet] minion commands need a connected player; run from the client remote console")
         return nil, nil
     end
     return player, player.components.leader:GetFollowersByTag("gauntlet_minion")
@@ -856,7 +856,7 @@ end
 
 _G.c_minion_spawn = function()
     if _G.TheWorld == nil or not _G.TheWorld.ismastersim then
-        print("[Gauntlet] master-sim only — use the remote console")
+        print("[Gauntlet] master-sim only; use the remote console")
         return
     end
     local player = _G.ConsoleCommandPlayer()
@@ -868,7 +868,7 @@ _G.c_minion_spawn = function()
     local minion = _G.SpawnPrefab("gauntlet_minion")
     minion.Transform:SetPosition(pos:Get())
     if not minion:SetMinionOwner(player) then
-        print(string.format("[Gauntlet] at the minion cap (%d) — dismiss one first", TUNING.GAUNTLET_MINION_MAX))
+        print(string.format("[Gauntlet] at the minion cap (%d); dismiss one first", TUNING.GAUNTLET_MINION_MAX))
         minion:Remove()
         return
     end

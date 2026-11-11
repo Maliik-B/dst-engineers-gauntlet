@@ -1,11 +1,11 @@
--- Gauntlet minion brain — the commandable defender. A single ChaseAndAttack
+-- Gauntlet minion brain: the commandable defender. A single ChaseAndAttack
 -- drives combat in every mode (the combat retarget/keep-target decides WHAT is a
 -- valid target per command; see the prefab), and the mode selects the idle
 -- movement node: Follow the owner, or Leash to a defend point. FOCUS just forces
 -- a combat target, so it falls through to the same ChaseAndAttack.
 --
 -- Server-authoritative: this brain only runs on the master sim (engine tears it
--- down on entity sleep — the M3 baseline discipline, no manual sleep handling).
+-- down on entity sleep; the M3 baseline discipline, no manual sleep handling).
 
 require("behaviours/chaseandattack")
 require("behaviours/leash")

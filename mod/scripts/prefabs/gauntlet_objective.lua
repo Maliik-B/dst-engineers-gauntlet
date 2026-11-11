@@ -1,4 +1,4 @@
--- Gauntlet Engine — the defended objective.
+-- Gauntlet Engine: the defended objective.
 --
 -- Walls + catapult hybrid: a structure with health that mob combat can
 -- target (needs a combat component to pass IsValidTarget) but that never
@@ -77,7 +77,7 @@ end
 -- Hammer-to-dismantle: the deliberate player removal path (the wall idiom),
 -- a separate channel from the combat/health lose bar. Removing the engine
 -- fires "onremove", which the siegemanager reads as a voluntary stand-down
--- (NOT a defeat) — the moonbase precedent of interrupting the event by
+-- (NOT a defeat), the moonbase precedent of interrupting the event by
 -- acting on its trigger object. Ungated on purpose: you can dismantle
 -- mid-run to call it off.
 local function OnHammered(inst)
@@ -222,7 +222,7 @@ local function fn()
 
     -- The Engine glows: a warm lit defensive zone so night isn't an uncontrolled
     -- difficulty spike (you can see to command + minions aren't fighting blind).
-    -- Configured identically on both sides (pre-pristine) — deterministic, no netvar.
+    -- Configured identically on both sides (pre-pristine): deterministic, no netvar.
     inst.Light:SetRadius(TUNING.GAUNTLET_OBJECTIVE_LIGHT_RADIUS)
     inst.Light:SetIntensity(.65)
     inst.Light:SetFalloff(.7)
@@ -268,7 +268,7 @@ local function fn()
     -- just at roughly attacker-tier DPS. The hammer channel below is the clean
     -- *neutral* dismantle; weapon-to-death trips the normal lose condition.
     -- (DoDelta only applies this when the afflicter has the "player" tag, so
-    -- mob damage — the lose bar — is untouched.)
+    -- mob damage, the lose bar, is untouched.)
     inst.components.health:SetAbsorptionAmountFromPlayer(TUNING.GAUNTLET_OBJECTIVE_PLAYER_ABSORB)
     -- Seed the replicated HP bucket to full (SetMaxHealth doesn't fire
     -- "healthdelta", so the listener below won't until the first hit).

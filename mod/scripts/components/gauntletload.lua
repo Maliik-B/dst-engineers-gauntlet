@@ -1,5 +1,5 @@
 --------------------------------------------------------------------------
--- gauntletload — per-attacker load path, one instance on every attacker. This
+-- gauntletload: per-attacker load path, one instance on every attacker. This
 -- is the controlled experiment at the heart of the centerpiece: the SAME
 -- representative per-entity work (a local neighbour-density scan) run two ways,
 -- switched live by the global c_naive flag on identical load -- same scene, one

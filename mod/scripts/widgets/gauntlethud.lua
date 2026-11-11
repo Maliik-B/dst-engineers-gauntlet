@@ -1,4 +1,4 @@
--- Gauntlet HUD — a top-center siege-status readout (wave + Engine HP), drawn
+-- Gauntlet HUD: a top-center siege-status readout (wave + Engine HP), drawn
 -- entirely from the objective's ALREADY-replicated netvars. Client-side; added
 -- to the player HUD via AddClassPostConstruct in modmain. No new replication: it
 -- finds the objective by tag and reads _wave/_phase/_objhp directly, and hides

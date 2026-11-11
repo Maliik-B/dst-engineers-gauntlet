@@ -1,14 +1,14 @@
--- Gauntlet spider attackers — the M5 roster's two new types, built LEAN on the
+-- Gauntlet spider attackers: the M5 roster's two new types, built LEAN on the
 -- spider art + SGspider, sharing our existing gauntletattackerbrain (objective
 -- handoff via entitytracker, anti-kiting, siege the Engine). NOT clones of the
--- heavy befriendable spider prefab — just its art/SG + our siege AI, the same
+-- heavy befriendable spider prefab: just its art/SG + our siege AI, the same
 -- way gauntlet_attacker is a lean retuned hound.
 --
---   Breaker  — tanky, slow, hits hard; retargets the "gauntlet_defense" tag, so
+--   Breaker:   tanky, slow, hits hard; retargets the "gauntlet_defense" tag, so
 --              it makes a beeline for turrets/minions and batters them. This is
 --              what finally exercises the defense layer's HP + self-repair (the
 --              survive-swarm pain the M4 scene couldn't show).
---   Swarmer  — fast, fragile chaff; retargets the defending player like the
+--   Swarmer:   fast, fragile chaff; retargets the defending player like the
 --              Besieger. Numerous + weak: makes the turret AOE shine and gives
 --              the minion's focus command a clear use.
 --
@@ -181,7 +181,7 @@ local function MakeSpiderAttacker(data)
 end
 
 -- Breaker: hunts the defense layer (gauntlet_defense = turret + minion). Tanky,
--- slow, big hits. Don't cant-tag "structure" — the turret IS one.
+-- slow, big hits. Don't cant-tag "structure": the turret IS one.
 local BREAKER_MUST = { "gauntlet_defense" }
 local BREAKER_CANT = { "INLIMBO", "flight", "invisible", "playerghost" }
 
@@ -194,7 +194,7 @@ return MakeSpiderAttacker({
         build = "spider_warrior_build",
         warrior = true,
         scale = 1.2,
-        tint = { .45, 0, 0 }, -- additive angry red — the dangerous one
+        tint = { .45, 0, 0 }, -- additive angry red, the dangerous one
         health = TUNING.GAUNTLET_BREAKER_HEALTH,
         damage = TUNING.GAUNTLET_BREAKER_DAMAGE,
         attackperiod = TUNING.GAUNTLET_BREAKER_ATTACK_PERIOD,
@@ -207,7 +207,7 @@ return MakeSpiderAttacker({
         name = "gauntlet_swarmer",
         build = "spider_build",
         scale = .7,
-        tint = { .08, .12, .3 }, -- additive cold pale — distinct from green Besieger / red Breaker
+        tint = { .08, .12, .3 }, -- additive cold pale, distinct from green Besieger / red Breaker
         health = TUNING.GAUNTLET_SWARMER_HEALTH,
         damage = TUNING.GAUNTLET_SWARMER_DAMAGE,
         attackperiod = TUNING.GAUNTLET_SWARMER_ATTACK_PERIOD,

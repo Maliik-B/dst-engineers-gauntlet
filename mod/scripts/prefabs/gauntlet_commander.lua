@@ -1,4 +1,4 @@
--- Gauntlet Commander — the held command tool for the minion (the deploy/command
+-- Gauntlet Commander: the held command tool for the minion (the deploy/command
 -- UX, character-agnostic). A simple hand-equippable that reuses Winona's remote-
 -- control art (engineer-remote read; no new art). It carries NO command logic
 -- itself: while it's equipped, a CLIENT-side right-click handler (in modmain)
@@ -46,7 +46,7 @@ local function fn()
     inst.AnimState:SetBank("winona_remote")
     inst.AnimState:SetBuild("winona_remote")
     inst.AnimState:PlayAnimation("idle")
-    -- Loud green additive recolor (the remote's own LED colour) — green's peak luminance
+    -- Loud green additive recolor (the remote's own LED colour); green's peak luminance
     -- keeps it the brightest thing on screen under any time-of-day grade (world + float;
     -- held tinted the same in OnEquip).
     inst.AnimState:SetAddColour(.18, .7, .2, 0)
@@ -65,7 +65,7 @@ local function fn()
 
     inst:AddComponent("inventoryitem")
     -- Slot icon: the world + held visual are runtime-tinted green (above / OnEquip),
-    -- but itemtile draws the slot straight from the .tex and can't be tinted — so the
+    -- but itemtile draws the slot straight from the .tex and can't be tinted, so the
     -- slot falls back to the shipped winona_remote image. A bespoke recolored atlas is
     -- optional future polish, not a gap.
     inst.components.inventoryitem:ChangeImageName("winona_remote")

@@ -1,4 +1,4 @@
--- Gauntlet Sentinel — the commandable minion, character-agnostic.
+-- Gauntlet Sentinel: the commandable minion, character-agnostic.
 --
 -- A recolored Damaged Clockwork Knight (reuses the knight art/SG/locomotion),
 -- retuned into a player-owned defender with a 3-verb command vocabulary:
@@ -8,12 +8,12 @@
 --
 -- Server-authoritative: all command state + AI live on the master sim. The
 -- command mode replicates to clients as ONE quantized net_tinybyte, set() only on
--- change (M3 netvar discipline — no churn). Clients send command INTENT via a
+-- change (M3 netvar discipline: no churn). Clients send command INTENT via a
 -- validated RPC (Phase 4c); they never set command state directly.
 --
 -- Combat is filtered to hostile/monster mobs only (the shared enemy policy), so
 -- it fights any threat yet can't hit players, allies, the objective, or turrets
--- — and they can't hit it. Deployed via a placer recipe; ownership is structure-
+-- (and they can't hit it). Deployed via a placer recipe; ownership is structure-
 -- like (stamped owner-id, persists across disconnect/reload).
 
 require("prefabutil") -- MakePlacer
@@ -35,7 +35,7 @@ local brain = require("brains/gauntletminionbrain")
 local TARGETING = require("gauntlet_targeting")
 
 --------------------------------------------------------------------------
--- Targeting — the shared enemy policy (hostile/monster mobs, never player-side).
+-- Targeting: the shared enemy policy (hostile/monster mobs, never player-side).
 -- The active "anchor" (defend point / leader / self) gates keep-target so the
 -- minion can't be kited off its post; FOCUS holds its forced target regardless.
 --------------------------------------------------------------------------
@@ -94,7 +94,7 @@ local function OnHealthDelta(inst)
         return
     end
     -- Wear feedback: the knight art has no damage tiers, so shift the cyan tint
-    -- smoothly toward red as HP drops (and back as it self-repairs) — a continuous
+    -- smoothly toward red as HP drops (and back as it self-repairs), a continuous
     -- gradient so the damage level is legible at a glance.
     local hurt = 1 - health:GetPercent()
     inst.AnimState:SetMultColour(.5 + .5 * hurt, .78 - .58 * hurt, 1 - .8 * hurt, 1)
@@ -153,7 +153,7 @@ local function SetMinionCommand(inst, mode, x, z)
         if focus == nil then
             return false -- no enemy near the clicked point; command ignored
         end
-        -- Remember the post/stance to return to once the sortie ends — but don't
+        -- Remember the post/stance to return to once the sortie ends, but don't
         -- overwrite it if we're already focusing and just switching targets.
         if inst._command ~= CMD.FOCUS then
             inst._prevcommand = inst._command
@@ -191,7 +191,7 @@ local function SetMinionOwner(inst, player)
     return true
 end
 
--- Restore ownership to the stamped owner whenever they are present — no cap
+-- Restore ownership to the stamped owner whenever they are present, with no cap
 -- check (it's already ours) and no distance gate (the stock pet re-follow needs
 -- you nearby; a deployed defender shouldn't lapse just because you respawned at
 -- the portal). Called on player-join and once after load.
@@ -327,7 +327,7 @@ local function fn()
     -- removes that (the shipped YOTH-knight does the same).
     inst.components.follower:KeepLeaderOnAttacked()
     -- Ignore the owner's click-targets: Leader:OnNewTarget/OnAttacked broadcast
-    -- whatever the player targets to followers (leader.lua:152) — that made the
+    -- whatever the player targets to followers (leader.lua:152), which made the
     -- minion attack the Engine (and would make minions attack each other). The
     -- minion picks foes ONLY through its own attacker-only retarget + FOCUS.
     inst.components.follower.canaccepttarget = false
@@ -360,7 +360,7 @@ local function fn()
     -- distance-independent, so the minion stays yours across disconnects/respawns.
     inst:ListenForEvent("onbuilt", function(minion, data)
         -- Deploy feedback: the minion is a clockwork construct, so a metallic robotic
-        -- turn-on reads better than a stone-place thud — the Wagdrone's beep+whir
+        -- turn-on reads better than a stone-place thud: the Wagdrone's beep+whir
         -- "powering on" (rifts5), so the unit sounds like it's coming online.
         if minion.SoundEmitter ~= nil then
             minion.SoundEmitter:PlaySound("rifts5/wagdrone_rolling/beep_turnon")

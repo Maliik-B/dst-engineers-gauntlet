@@ -1,4 +1,4 @@
--- Gauntlet attacker brain — moonbeastbrain structure, retargeted at the
+-- Gauntlet attacker brain: moonbeastbrain structure, retargeted at the
 -- Gauntlet objective. Priority order: panic > lost-objective cleanup >
 -- chew blocking walls > fight engaging defenders (short chase) > leash to
 -- the objective and attack it > regroup near it.

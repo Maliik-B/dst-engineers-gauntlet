@@ -1,5 +1,5 @@
 @echo off
-rem Engineer's Gauntlet — local offline dev server (single shard, Master only)
+rem Engineer's Gauntlet: local offline dev server (single shard, Master only)
 rem Cluster files live at %USERPROFILE%\Documents\Klei\DoNotStarveTogether\EngineersGauntletDev
 rem Type Lua directly into this window for server-side console (e.g. c_gauntlet()).
 rem c_shutdown() saves and stops the server cleanly.

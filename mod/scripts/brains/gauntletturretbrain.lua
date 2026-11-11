@@ -1,4 +1,4 @@
--- Gauntlet turret brain — the Winona-catapult / eyeturret idiom: a fixed
+-- Gauntlet turret brain, in the Winona-catapult / eyeturret idiom: a fixed
 -- defender whose entire brain is StandAndAttack. Target acquisition and attack
 -- cadence live in the combat component (retarget fn + attack-period cooldown);
 -- the brain just validates the target, faces it, and calls TryAttack each visit.

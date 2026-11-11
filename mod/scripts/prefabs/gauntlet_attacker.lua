@@ -1,4 +1,4 @@
--- Gauntlet attacker — a retuned hound that sieges the Gauntlet objective.
+-- Gauntlet attacker: a retuned hound that sieges the Gauntlet objective.
 --
 -- The wave spawner stamps the objective onto each attacker at spawn time via
 -- entitytracker (survives save/load by GUID), and the brain leashes to it.
@@ -107,7 +107,7 @@ local function fn()
     inst.AnimState:SetBuild("hound_ocean")
     inst.AnimState:PlayAnimation("idle")
     -- Additive tint (not mult: spawnfader drives the mult colour during the
-    -- fade-in) — sickly green recolor of the hound art.
+    -- fade-in): sickly green recolor of the hound art.
     inst.AnimState:SetAddColour(.04, .16, .02, 0)
 
     inst:AddComponent("spawnfader")

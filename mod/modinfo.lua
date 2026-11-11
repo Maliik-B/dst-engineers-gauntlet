@@ -3,7 +3,7 @@
 -- naive-vs-optimized netcode demonstration.
 
 name = "Engineer's Gauntlet"
-description = [[Hold the line. Plant your Engine, then weather escalating waves that march straight for it - they won't be kited into a maze, so it's just you and a thickening swarm.
+description = [[Hold the line. Plant your Engine, then weather escalating waves that march straight for it. Kiting is part of the game, but the attackers are leashed to the Engine and only chase you a short way, so you can't walk the whole wave off.
 
 Build auto-turrets, deploy a minion you can actually order around (hold this spot, follow me, or go kill that one), and when the Engine's down to its last sparks, patch it back together and run it again. Any character can play engineer.
 

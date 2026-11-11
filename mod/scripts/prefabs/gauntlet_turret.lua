@@ -1,22 +1,22 @@
--- Gauntlet Sentry — the buildable auto-turret, character-agnostic.
+-- Gauntlet Sentry: the buildable auto-turret, character-agnostic.
 --
 -- Built on the eyeturret / Houndius-Shootius pattern (the shipped "any character
 -- can craft an auto-turret" precedent): health + self-repair regen, a combat
 -- component owning targeting + cadence, a StandAndAttack brain, an equipped
 -- weapon that launches a projectile. NO power/circuit (the Winona-catapult's
 -- battery is character-locked and an economy lever; v1 balances with a build-cap
--- + recipe cost instead — see modmain). Driven by the Winona-catapult ART
+-- + recipe cost instead; see modmain). Driven by the Winona-catapult ART
 -- (recolored amber) for the engineer/mechanical read.
 --
 -- The three documented turret pains, fixed by construction:
---   * target-filter   — retarget + the projectile AOE use the shared enemy
+--   * target-filter:    retarget + the projectile AOE use the shared enemy
 --                        policy (gauntlet_targeting): hostile/monster mobs only,
 --                        excluding all player-side (players, companions,
---                        structures) — so it fights anything hostile yet can
+--                        structures), so it fights anything hostile yet can
 --                        never hit players, allies, the objective or turrets.
---   * shoot-through-wall — the projectile is a `projectile`-component shot that
+--   * shoot-through-wall: the projectile is a `projectile`-component shot that
 --                        ignores terrain, so it clears walls (see the projectile).
---   * survive-swarm   — health + regen lets it tank the aggro it draws; the
+--   * survive-swarm:    health + regen lets it tank the aggro it draws; the
 --                        build-cap keeps it from trivializing a wave.
 --
 -- Sleep-correct for free: the combat component stops its retarget task on entity
@@ -40,7 +40,7 @@ local brain = require("brains/gauntletturretbrain")
 local TARGETING = require("gauntlet_targeting")
 
 --------------------------------------------------------------------------
--- Target acquisition — the shared enemy policy: hostile/monster mobs, never
+-- Target acquisition (the shared enemy policy): hostile/monster mobs, never
 -- player-side (gauntlet_targeting). The exclusion list is what keeps the turret
 -- from ever acquiring a player, ally, or structure.
 --------------------------------------------------------------------------
@@ -97,7 +97,7 @@ local function OnHealthDelta(inst)
     end
     -- Wear feedback: the catapult art has no damage tiers, so shift the amber
     -- tint smoothly toward red as HP drops (and back as it self-repairs) by
-    -- fading the green/blue channels — a continuous gradient (not additive red,
+    -- fading the green/blue channels, a continuous gradient (not additive red,
     -- which barely reads at high HP), so the damage level is legible at a glance.
     local hurt = 1 - health:GetPercent()
     inst.AnimState:SetMultColour(1, .82 - .72 * hurt, .5 - .42 * hurt, 1)
@@ -110,7 +110,7 @@ end
 
 -- Deploy feedback: the shipped catapult plays its "place" sound the moment it's
 -- built (SGwinona_catapult onenter of its place state). We build via a placer
--- recipe, so the engine fires an "onbuilt" event on the finished structure — we
+-- recipe, so the engine fires an "onbuilt" event on the finished structure; we
 -- hang the same catapult place sound off it so the turret doesn't appear silently.
 local function OnBuilt(inst)
     inst.SoundEmitter:PlaySound("dontstarve/common/together/catapult/place")
@@ -209,7 +209,7 @@ local function fn()
     return inst
 end
 
--- Range affordance (Klei parity — the Winona-catapult placer ring): a ground
+-- Range affordance (Klei parity: the Winona-catapult placer ring): a ground
 -- circle showing the turret's attack radius while you place it. Reuses the
 -- catapult's "idle_15" ring art (10u radius at scale 1, 15u at the catapult's
 -- 1.5), rescaled to our range so it adapts if the range is retuned.
@@ -245,7 +245,7 @@ local function PlacerPostInit(inst)
     CreateRangeRing().entity:SetParent(inst.entity)
 end
 
--- Placer ghost: match the shipped catapult placer — the "idle_placer" anim with
+-- Placer ghost: match the shipped catapult placer, the "idle_placer" anim with
 -- two-faced setup (winona_catapult.lua:1198-1202), not the directional "idle".
 return Prefab("gauntlet_turret", fn, assets, prefabs),
     MakePlacer("gauntlet_turret_placer", "winona_catapult", "winona_catapult", "idle_placer",

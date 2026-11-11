@@ -1,5 +1,5 @@
 --------------------------------------------------------------------------
--- SiegeManager — master-sim world component that drives the Gauntlet wave
+-- SiegeManager: master-sim world component that drives the Gauntlet wave
 -- loop. Modeled on hounded.lua (phase state machine + drip-release in
 -- OnUpdate, LongUpdate = OnUpdate) with the inter-wave clock delegated to
 -- worldsettingstimer (deerclopsspawner pattern) for free save/load,
@@ -78,7 +78,7 @@ local function SetWave(wave)
         _objective:SetSiegeWave(wave)
         -- Re-assert the replicated total here too (set-on-change, no churn) so a
         -- server-side NUM_WAVES change reflects on the next siege without a
-        -- re-place — SetWave(0) runs at every fresh-run start.
+        -- re-place: SetWave(0) runs at every fresh-run start.
         _objective:SetSiegeMaxWave(TUNING.GAUNTLET_NUM_WAVES)
     end
 end
@@ -95,7 +95,7 @@ end
 
 local function CalcWaveSize(wave)
     -- The explicit per-wave counts are the tuned shape at the DEFAULT wave_size; the
-    -- wave_size config scales them (a difficulty/load multiplier — "Stress 80" drives
+    -- wave_size config scales them (a difficulty/load multiplier; "Stress 80" drives
     -- the perf A/Bs). The WAVE_SIZE*growth formula is the fallback beyond the table.
     local base = ClampedRow(TUNING.GAUNTLET_WAVE_COUNTS, wave)
     local size = (base ~= nil)
@@ -172,7 +172,7 @@ end
 -- of a target player). Tries progressively CLOSER rings so a cramped placement
 -- (water/holes eating the outer ring) still finds ground instead of stalling the
 -- whole siege with zero spawns. Last resort: the objective's own tile (it was
--- placeable, so it's walkable) — this never returns nil while an objective exists,
+-- placeable, so it's walkable); this never returns nil while an objective exists,
 -- so the drip can't dead-loop on a bad placement.
 -- Progressively closer rings (multipliers of SPAWN_DIST) tried in order; hoisted so
 -- the drip hot path doesn't rebuild the list on every spawn.
@@ -203,7 +203,7 @@ end
 
 -- Wave roster: which attacker types are eligible per wave, weighted. Early waves
 -- are pure Besiegers; the Swarmer joins at wave 2 and the Breaker at wave 3, so
--- difficulty + variety ramp together. Extensible — v2's ranged type is one row.
+-- difficulty + variety ramp together. Extensible: v2's ranged type is one row.
 local WAVE_ROSTER =
 {
     { prefab = "gauntlet_attacker", weight = 1.0, minwave = 1 }, -- Besieger (baseline)
@@ -384,7 +384,7 @@ local function ScheduleResultsWindow()
     end)
 end
 
--- Engine HP as an integer percent — shown in chat + logged so the toll per wave
+-- Engine HP as an integer percent, shown in chat + logged so the toll per wave
 -- (and the final margin) is captured for tuning. 0 if the objective is gone.
 local function EngineHPPct()
     return (_objective ~= nil and _objective:IsValid() and _objective.components.health ~= nil)
@@ -396,7 +396,7 @@ local function Victory()
     SetUpdating(false)
     ScheduleResultsWindow()
     local hp = EngineHPPct()
-    print(string.format("[Gauntlet] VICTORY — Engine at %d%%", hp))
+    print(string.format("[Gauntlet] VICTORY: Engine at %d%%", hp))
     TheNet:Announce(string.format("Victory! The Engine survived all %d waves at %d%%.", _wavenum, hp))
 end
 
@@ -416,11 +416,11 @@ local function OnWaveCleared()
     if _wavenum >= TUNING.GAUNTLET_NUM_WAVES then
         Victory()
     else
-        -- Fires when the wave's last attacker dies (the user-requested "wave done"
+        -- Fires when the wave's last attacker dies (the "wave done"
         -- cue). Victory() covers the final wave, so this is non-final only. The HP
-        -- read shows the wave's toll — player-facing in chat + logged for tuning.
+        -- read shows the wave's toll, player-facing in chat + logged for tuning.
         local hp = EngineHPPct()
-        print(string.format("[Gauntlet] Wave %d cleared — Engine at %d%%", _wavenum, hp))
+        print(string.format("[Gauntlet] Wave %d cleared, Engine at %d%%", _wavenum, hp))
         TheNet:Announce(string.format("Wave %d repelled! Engine at %d%%.", _wavenum, hp))
         ScheduleWave(TUNING.GAUNTLET_WAVE_DELAY)
     end
@@ -481,7 +481,7 @@ end
 -- player's position.
 function self:PlaceObjective(pt)
     if _phase == PHASE.PREP or _phase == PHASE.ACTIVE then
-        print("[Gauntlet] Can't move the objective mid-siege — c_gauntlet_stop() first")
+        print("[Gauntlet] Can't move the objective mid-siege; c_gauntlet_stop() first")
         return nil
     end
     if _objective ~= nil and _objective:IsValid() then
@@ -504,10 +504,10 @@ end
 
 function self:StartSiege()
     if _objective == nil or not _objective:IsValid() then
-        print("[Gauntlet] No objective placed — run c_gauntlet_place() first")
+        print("[Gauntlet] No objective placed; run c_gauntlet_place() first")
         return
     elseif _objective.components.health:IsDead() then
-        print("[Gauntlet] The Engine is destroyed — place a fresh one with c_gauntlet_place()")
+        print("[Gauntlet] The Engine is destroyed; place a fresh one with c_gauntlet_place()")
         return
     elseif _phase == PHASE.ACTIVE then
         print("[Gauntlet] A wave is already active")
@@ -533,10 +533,10 @@ end
 -- phase (during a wave it simply adds to the live count).
 function self:Stress(n, prefab)
     if _objective == nil or not _objective:IsValid() then
-        print("[Gauntlet] no objective placed — run c_gauntlet_place() first")
+        print("[Gauntlet] no objective placed; run c_gauntlet_place() first")
         return 0
     elseif _objective.components.health:IsDead() then
-        print("[Gauntlet] the Engine is destroyed — place a fresh one first")
+        print("[Gauntlet] the Engine is destroyed; place a fresh one first")
         return 0
     end
     prefab = prefab or "gauntlet_attacker"
@@ -563,7 +563,7 @@ function self:Stress(n, prefab)
     end
     print(string.format("[Gauntlet] c_stress: +%d/%d %s (active=%d/%d, naive=%s)%s",
         spawned, n, prefab, _numactive, TUNING.GAUNTLET_MAX_ATTACKERS, tostring(_naive),
-        capped and " — hit the concurrent cap" or ""))
+        capped and " (hit the concurrent cap)" or ""))
     return spawned
 end
 
@@ -656,7 +656,7 @@ end
 
 -- Time-skips (c_skip, sleeping, load catch-up) advance the warning/release
 -- state too. NOTE: the engine calls LongUpdate on every component that
--- defines it, even one not in the update set — so this also fires once on
+-- defines it, even one not in the update set, so this also fires once on
 -- world load. OnLoad is written to leave a consistent phase for that call.
 self.LongUpdate = self.OnUpdate
 
@@ -689,7 +689,7 @@ function self:OnLoad(data)
         -- Mid-wave save: the wave's attackers were persists=false and are
         -- gone. A load-time LongUpdate would otherwise see this empty wave and
         -- miscredit it as cleared (advancing the counter). Convert it
-        -- synchronously — before any LongUpdate can run — into a fair re-run
+        -- synchronously (before any LongUpdate can run) into a fair re-run
         -- of the interrupted wave (hounded's "give players a fighting chance").
         SetWave(math.max(0, _wavenum - 1))
         _spawnsleft = 0
@@ -755,7 +755,7 @@ end
 -- Inter-wave clock. maxtime doubles as the save-rescale base: a saved
 -- fraction of the old delay maps onto a changed config cleanly.
 -- Note: the clock keeps running with zero players online (unlike hounded's
--- empty-server freeze) — an arena run is started by hand and short; revisit
+-- empty-server freeze), since an arena run is started by hand and short; revisit
 -- if dedicated public servers ever matter.
 _worldsettingstimer:AddTimer(WAVE_TIMER, TUNING.GAUNTLET_WAVE_DELAY, true, OnWaveTimerDone)
 

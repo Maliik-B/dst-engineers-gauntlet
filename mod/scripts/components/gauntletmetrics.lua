@@ -1,11 +1,11 @@
 --------------------------------------------------------------------------
--- gauntletmetrics — master-sim world component, the measurement layer for the
+-- gauntletmetrics: master-sim world component, the measurement layer for the
 -- naive-vs-optimized demonstration. Console readout for M3 (c_metrics); the
 -- same numbers feed the on-screen HUD in M5.
 --
 -- The numbers, leading with the trustworthy ones:
 --
---   compute (ms/tick) — the FIX FIRST from M2. The M2 MSPT read the wall-clock
+--   compute (ms/tick): the FIX FIRST from M2. The M2 MSPT read the wall-clock
 --     interval BETWEEN ticks (GetTimeReal deltas), which the dedicated server's
 --     variable frame pacing confounds: idle it throttles to ~30fps, lightly
 --     loaded it free-runs uncapped at 80-199fps, so the "fps" swung on pacing,
@@ -19,19 +19,19 @@
 --     calls converges to the true total. This is the number that actually moves
 --     with load, and it isn't confounded by pacing.
 --
---   scan-ops (/s) — exact integer count of neighbour candidates examined by the
+--   scan-ops (/s): exact integer count of neighbour candidates examined by the
 --     load scans. Resolution-independent, unimpeachable; the cross-check that
 --     backs the compute-ms. Leads the writeup alongside updating_ents.
 --
---   num_updating_ents — the engine's live updating-entity counter (a Lua
+--   num_updating_ents: the engine's live updating-entity counter (a Lua
 --     global, main.lua:301). The off-screen A/B: a naive horde never self-stops
 --     so it stays pegged here; the optimized horde drops out on sleep.
 --
---   netvar churn (/s) and spawn RPCs — exact counts fed by the load component
+--   netvar churn (/s) and spawn RPCs: exact counts fed by the load component
 --     (net_float dirties), the objective (HP-bucket dirties) and the spawn path
 --     (per-spawn vs batched RPC sends).
 --
---   frame (ms / ~fps) — the OLD inter-tick wall-clock interval, kept but demoted
+--   frame (ms / ~fps): the OLD inter-tick wall-clock interval, kept but demoted
 --     to observational. It still answers one honest question: if it climbs over
 --     ~33ms the server is genuinely below 30fps (a real melt). Below that it's
 --     pacing noise -- don't read fps off it.

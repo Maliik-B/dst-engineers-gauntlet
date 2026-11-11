@@ -1,4 +1,4 @@
--- Gauntlet turret stategraph — the eyeturret/SGeyeturret shape (idle / attack /
+-- Gauntlet turret stategraph: the eyeturret/SGeyeturret shape (idle / attack /
 -- hit / death) driving the Winona-catapult art, stripped of the catapult's
 -- power, elemental and volley machinery. The combat component owns cadence; the
 -- attack state just plays the throw anim and, at the release frame, calls
@@ -106,7 +106,7 @@ local states =
             RemovePhysicsColliders(inst)
             inst.sg:SetTimeout(2) -- fallback removal if "animover" doesn't fire
             -- No loot on combat-death: the hammer (workable) is the intentional
-            -- refund path. A destroyed turret is simply lost — and removes itself
+            -- refund path. A destroyed turret is simply lost, and removes itself
             -- after the death anim so it can't linger as rubble that still counts
             -- against the build cap (it keeps its tag while it exists).
         end,

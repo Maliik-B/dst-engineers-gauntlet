@@ -1,14 +1,14 @@
--- Gauntlet turret projectile — the ballistic AOE shot fired by gauntlet_turret.
+-- Gauntlet turret projectile: the ballistic AOE shot fired by gauntlet_turret.
 --
 -- A `complexprojectile` lob (the Winona-catapult model), NOT the eyeturret's
 -- straight `projectile`. Chosen deliberately: complexprojectile's Hit calls ONLY
 -- our onhitfn (no engine auto-damage), so the projectile's OWN combat resolves
--- the entire AOE in one place — no double-hit, and no risk of routing damage back
+-- the entire AOE in one place: no double-hit, and no risk of routing damage back
 -- through the turret (which would relaunch projectiles in a cascade). The arc
--- also lobs over walls — the "shoot-through-wall" turret-pain fix.
+-- also lobs over walls, the "shoot-through-wall" turret-pain fix.
 --
 -- The AOE uses the shared enemy policy (gauntlet_targeting): hostile/monster
--- mobs only, never player-side. The exclusion list is the "target-filter" fix —
+-- mobs only, never player-side. The exclusion list is the "target-filter" fix:
 -- the blast search can't return players, allies, the objective, or turrets, so
 -- friendly fire is impossible even though it now damages any hostile.
 
